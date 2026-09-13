@@ -8,10 +8,21 @@ file in `automations/`.
 
 | file | what it does |
 |---|---|
-| `accu_dagplan_en_bijplan.yaml` | Decides how many quarter-hours the battery charges from the grid, and which mode it runs in |
+| `accu_dagplan_en_bijplan.yaml` | Fills the Zendure battery with solar wherever possible and tops up the remainder from the grid, only in the cheapest quarter-hours of the day. Plans ahead on the solar forecast and picks the battery mode to match |
 | `vaatwasser_starten_op_de_goedkoopste_prijs.yaml` | Starts the selected program on the Siemens dishwasher, delayed until the cheapest window |
 | `boiler_verhogen_zonoverschot.yaml` | Raises the hot water setpoint on the Ecoforest heat pump when there is real solar surplus |
-| `warmtepomp_koeling_uit_bij_hoge_stroomprijs.yaml` | Turns the heat pump off above EUR 0.50 per kWh when warm weather is forecast |
+| `warmtepomp_koeling_uit_bij_hoge_stroomprijs.yaml` | Turns the Ecoforest heat pump off above EUR 0.50 per kWh when warm weather is forecast |
+
+## Hardware
+
+Not tied to one specific model. Comparable models from these brands will work,
+with different entity IDs.
+
+- **Zendure SolarFlow** home battery (mine is a 2400 AC+)
+- **Ecoforest** heat pump with its domestic hot water tank, controlled through
+  an Eplucon Th-touch
+- **Siemens** dishwasher on Home Connect
+- **HomeWizard P1** meter, for grid import and export
 
 ## Dependencies
 
@@ -20,8 +31,7 @@ file in `automations/`.
 - **Solcast** for the solar forecast
 - **Home Connect** for the dishwasher
 - **Eplucon** and the **tech** integration for the Ecoforest heat pump
-- **HomeWizard P1** for grid metering
-- A **Nordpool** sensor via HACS, wired into the Gielz package
+- A **Nordpool** sensor via HACS for the quarter-hour prices
 
 ## Measured assumptions
 

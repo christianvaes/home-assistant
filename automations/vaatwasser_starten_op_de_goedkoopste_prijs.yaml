@@ -25,17 +25,18 @@ actions:
         {% set laatste_start = today_at('18:00')
              + timedelta(days=1 if now() >= today_at('18:00') else 0)
              - timedelta(hours=programma_duur_uren) %}
-        {% set toekomst = ((state_attr('sensor.dynamisch_nordpool','raw_today') or [])
-             + (state_attr('sensor.dynamisch_nordpool','raw_tomorrow') or []))
-             | selectattr('start','gt', now().isoformat()) | list %}
+        {% set toekomst = ((state_attr('sensor.nordpool_kwh_nl_eur_4_10_0','raw_today') or [])
+             + (state_attr('sensor.nordpool_kwh_nl_eur_4_10_0','raw_tomorrow') or []))
+             | rejectattr('value','none') | selectattr('start','gt', now()) | list %}
         {% set ns = namespace(best=none, prijs=999) %}
         {% for i in range(0, toekomst | count - kwartieren + 1) %}
-          {% if (toekomst[i].start | as_datetime | as_local) <= laatste_start %}
+          {% if toekomst[i].start <= laatste_start %}
             {% set gem = (toekomst[i:i + kwartieren] | map(attribute='value') | sum) / kwartieren %}
             {% if gem < ns.prijs %}{% set ns.prijs = gem %}{% set ns.best = toekomst[i].start %}{% endif %}
           {% endif %}
         {% endfor %}
-        {{ ((ns.best | as_datetime - now()).total_seconds()) | round(0) | int if ns.best else 0 }}
+        {{ ((ns.best - now()).total_seconds()) | round(0) | int if ns.best else 0 }}
+    note: Rechtstreeks op de Nordpool-integratie, niet op het Gielz-package. De start-velden zijn datetimes, dus vergelijken zonder as_datetime. De rejectattr vangt af dat morgen nog niet gepubliceerd is, want lege kwartieren laten de som klappen.
   - alias: Alleen als er een venster is dat binnen 24 uur valt
     condition: template
     value_template: '{{ start_seconden > 0 and start_seconden <= 86400 }}'
