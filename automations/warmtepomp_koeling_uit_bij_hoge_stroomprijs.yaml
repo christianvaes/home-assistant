@@ -1,16 +1,17 @@
 alias: Warmtepomp koeling uit bij hoge stroomprijs
-description: Zet de warmtepomp uit als de stroomprijs boven 0,50 komt en het morgen warm wordt. Zakt de prijs een uur lang onder 0,50, dan gaat hij weer aan.
+description: Zet de warmtepomp uit als de stroomprijs boven 0,50 komt en het vandaag warm is. Zakt de prijs een uur lang onder 0,50, dan gaat hij weer aan.
 triggers:
   - alias: Prijs boven 0,50
     trigger: numeric_state
     entity_id:
-      - sensor.zonneplan_current_electricity_tariff
+      - sensor.nordpool_kwh_nl_eur_4_10_0
     above: 0.5
     id: duur
+    note: Nordpool met de all-in prijs uit de template, dus dezelfde schaal als Zonneplan. Per kwartier in plaats van per uur.
   - alias: Prijs een uur lang onder 0,50
     trigger: numeric_state
     entity_id:
-      - sensor.zonneplan_current_electricity_tariff
+      - sensor.nordpool_kwh_nl_eur_4_10_0
     below: 0.5
     id: goedkoop
     for:
@@ -24,10 +25,11 @@ actions:
         conditions:
           - condition: trigger
             id: duur
-          - alias: Alleen als het morgen boven 20 graden wordt
+          - alias: Alleen als het vandaag boven 20 graden wordt
             condition: numeric_state
             entity_id: sensor.temperatuur_verwachting_1d
             above: 20
+            note: Dagmaximum van vandaag. De helper pakt Buienradar en valt terug op KNMI, zodat een storing bij een van beide hem niet stillegt.
           - alias: Alleen als hij nu aan staat
             condition: state
             entity_id: select.ecoforest_ecoforest_warmtepomp
@@ -43,7 +45,7 @@ actions:
             action: notify.mobile_app_samsung_galaxy_s26_christian
             data:
               title: Warmtepomp koeling UIT
-              message: Stroomprijs {{ trigger.to_state.state | float | round(3) }} €/kWh (boven 0,50) en buitenverwachting {{ states('sensor.temperatuur_verwachting_1d') }} °C. Warmtepomp op 'Uit' gezet.
+              message: Stroomprijs {{ trigger.to_state.state | float | round(3) }} €/kWh (boven 0,50) en dagmaximum {{ states('sensor.temperatuur_verwachting_1d') }} °C. Warmtepomp op 'Uit' gezet.
       - alias: 'Prijs weer normaal: warmtepomp aan'
         conditions:
           - condition: trigger
