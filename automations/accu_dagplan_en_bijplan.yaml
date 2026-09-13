@@ -2,11 +2,11 @@ alias: Accu dagplan en bijplan
 description: |-
   Bepaalt hoeveel kwartieren de accu uit het net bijlaadt en in welke modus hij staat.
 
-  BESLISREGEL, in volgorde:
+  BESLISREGEL, IN VOLGORDE:
   1. Wordt er nu bijgeladen op net | Dynamisch NOM | alleen daar werkt het laadblok
   2. Goedkoopste kwartier en accu komt niet vol uit zon | Alleen slim opladen
-  3. Moet er vandaag nog bijgeladen worden | Dynamisch NOM
-  4. Anders | Nul op de meter
+  3. Moet er vandaag niets meer bijgeladen worden | Nul op de meter
+  4. Anders | Dynamisch NOM
 
   WAT DAT PER SITUATIE BETEKENT:
   - Zon over | accu komt vol uit zon | de zon vult de accu en dekt je huis | Nul op de meter
@@ -49,7 +49,7 @@ variables:
   zon_naar_accu_deel: 0.55          # deel van de zon dat de accu haalt
   zon_basislast: 1.5                # kWh aftrek bij weinig zon
   laadkwartieren_maximaal: 32       # acht uur
-  rendement: 0.87                   # round trip, iets onder de gemeten 87,9 procent
+  rendement: 0.87                   # round trip, iets onder de gemeten 87,6 procent
 
 actions:
   - choose:
@@ -111,13 +111,14 @@ actions:
                 {{ [ accu_inhoud * (100 - soc) / 100, 0 ] | max }}
               aan_te_vullen: >-             # rest die uit het net moet, kWh
                 {{ [ ruimte_in_accu - zonoverschot, 0 ] | max }}
-              verstreken: >-                # goedkope kwartieren die al voorbij zijn
-                {{ (state_attr('sensor.dynamisch_spread_indicatie','goedkoopste_periode') or [])
-                   | select('lt', now().strftime('%H:%M')) | list | count }}
+              verstreken: >-                # goedkope kwartieren die al afgelopen zijn
+                {{ (state_attr('sensor.dynamisch_goedkoopste_periode','raw_today') or [])
+                   | selectattr('goedkoop','eq','ja')
+                   | selectattr('end','le', now().isoformat()) | list | count }}
               nodig: >-                     # kwartieren laden die nog nodig zijn
                 {{ (aan_te_vullen / laadvermogen_per_kwartier)
                    | round(3) | round(0, 'ceil') | int }}
-              laadkwartieren: >-            # plus de voorbije, begrensd op het maximum
+              laadkwartieren: >-            # plus de afgelopen kwartieren, begrensd op het maximum
                 {{ [ nodig + verstreken, laadkwartieren_maximaal ] | min if nodig > 0 else 0 }}
 
           - alias: Alleen schrijven als het getal verandert
