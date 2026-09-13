@@ -1,0 +1,48 @@
+alias: Vaatwasser starten op de goedkoopste prijs
+description: Je ruimt in, drukt op start op afstand aan de binnenkant en sluit de deur. Home Assistant start dan het op de machine geselecteerde programma met een uitsteltijd tot het goedkoopste venster. De machine telt zelf af, dus dit werkt ook als Home Assistant herstart. Zonder de knop start hij niets.
+triggers:
+  - alias: Deur is gesloten
+    trigger: state
+    entity_id: sensor.vaatwasser_deur
+    to: closed
+conditions:
+  - alias: Hij staat klaar om te starten
+    condition: state
+    entity_id: sensor.vaatwasser_operation_state
+    state: ready
+variables:
+  programma_duur_uren: 2.5
+  kwartieren: 10
+actions:
+  - alias: Wachten tot start op afstand is doorgekomen, anders stoppen
+    wait_template: '{{ is_state(''binary_sensor.vaatwasser_remote_start'',''on'') }}'
+    timeout:
+      seconds: 60
+    continue_on_timeout: false
+    note: De cloud doet er ongeveer 25 seconden over. Is de knop niet ingedrukt, dan stopt de automatisering hier en gebeurt er niets.
+  - variables:
+      start_seconden: |-
+        {% set laatste_start = today_at('18:00')
+             + timedelta(days=1 if now() >= today_at('18:00') else 0)
+             - timedelta(hours=programma_duur_uren) %}
+        {% set toekomst = ((state_attr('sensor.dynamisch_nordpool','raw_today') or [])
+             + (state_attr('sensor.dynamisch_nordpool','raw_tomorrow') or []))
+             | selectattr('start','gt', now().isoformat()) | list %}
+        {% set ns = namespace(best=none, prijs=999) %}
+        {% for i in range(0, toekomst | count - kwartieren + 1) %}
+          {% if (toekomst[i].start | as_datetime | as_local) <= laatste_start %}
+            {% set gem = (toekomst[i:i + kwartieren] | map(attribute='value') | sum) / kwartieren %}
+            {% if gem < ns.prijs %}{% set ns.prijs = gem %}{% set ns.best = toekomst[i].start %}{% endif %}
+          {% endif %}
+        {% endfor %}
+        {{ ((ns.best | as_datetime - now()).total_seconds()) | round(0) | int if ns.best else 0 }}
+  - alias: Alleen als er een venster is dat binnen 24 uur valt
+    condition: template
+    value_template: '{{ start_seconden > 0 and start_seconden <= 86400 }}'
+    note: De vaatwasser accepteert maximaal 86400 seconden uitstel.
+  - alias: Start het geselecteerde programma met uitstel tot het goedkoopste venster
+    action: home_connect.start_selected_program
+    data:
+      device_id: 956af9be1c1a7a456436fd8ead80c97d
+      b_s_h_common_option_start_in_relative: '{{ start_seconden }}'
+mode: restart

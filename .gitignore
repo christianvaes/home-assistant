@@ -1,0 +1,6 @@
+# macOS
+.DS_Store
+
+# Persoonlijke documentatie: netwerkadressen, serienummers, verbruiksprofielen
+# en financiele afwegingen. Blijft lokaal.
+automations/docs/

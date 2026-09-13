@@ -1,0 +1,62 @@
+alias: Boiler verhogen zonoverschot
+description: Verhoogt de warmwater-setpoint van de 58 van EPEX naar 65 als je meer terugleverte dan de boiler zelf trekt. Teruglevering is per definitie wat de accu niet kwijt kan, dus dan is het echt over.
+triggers:
+  - alias: Teruglevering boven wat de boiler trekt
+    trigger: template
+    value_template: |-
+      {% set p1 = states('sensor.p1_meter_5c2faf108f1e_actueel_vermogen') | float(0) %}
+      {% set warmtepomp = states('sensor.warmtepomp_groep_electric_consumption_w') | float(0) %}
+      {{ warmtepomp - p1 > 2400 }}
+    for:
+      minutes: 10
+    id: aan
+    note: P1 is negatief bij teruglevering, dus min p1 is je overschot. Het warmtepompvermogen erbij, zodat het getal niet verspringt als de boiler zelf aan gaat. De boiler trekt gemeten 2177 W. Tien minuten, zodat een opklaring hem niet start.
+  - alias: Teruglevering te klein of de accu moet bijspringen
+    trigger: template
+    value_template: |-
+      {% set p1 = states('sensor.p1_meter_5c2faf108f1e_actueel_vermogen') | float(0) %}
+      {% set warmtepomp = states('sensor.warmtepomp_groep_electric_consumption_w') | float(0) %}
+      {% set ontlaadt = states('sensor.zendure_2400_ac_vermogen_export') | float(0) %}
+      {{ warmtepomp - p1 < 2200 or ontlaadt > 200 }}
+    for:
+      minutes: 20
+    id: uit
+    note: Ontlaadt de accu, dan komt de warmte niet meer van de zon. Twintig minuten, zodat de compressor zijn cyclus van 58 naar 65 kan afmaken.
+conditions: []
+actions:
+  - alias: Boiler verhogen bij overschot, of terugzetten als het weg is
+    if:
+      - condition: trigger
+        id: aan
+      - alias: Alleen als EPEX de boiler nu op 58 heeft staan
+        condition: numeric_state
+        entity_id: number.ecoforest_ecoforest_ww_ingestelde_temp_ww
+        above: 50
+        note: Op 45 houdt EPEX hem bewust laag wegens een dure prijs.
+    then:
+      - alias: Verhoog de boiler naar 65 graden
+        action: number.set_value
+        target:
+          entity_id: number.ecoforest_ecoforest_ww_ingestelde_temp_ww
+        data:
+          value: 65
+      - alias: Stuur een melding dat de boiler omhoog gaat
+        action: notify.mobile_app_samsung_galaxy_s26_christian
+        data:
+          title: Boiler omhoog op zonoverschot
+          message: Overschot {{ ((states('sensor.warmtepomp_groep_electric_consumption_w') | float(0)) - (states('sensor.p1_meter_5c2faf108f1e_actueel_vermogen') | float(0))) | round(0) }} W. Boiler van 58 naar 65 graden, nu {{ states('sensor.ww_temperature') }} °C.
+    else:
+      - alias: Onze verhoging ongedaan maken, maar EPEX niet overrulen
+        if:
+          - alias: Staat de boiler op onze 65 en niet op de 45 of 58 van EPEX
+            condition: numeric_state
+            entity_id: number.ecoforest_ecoforest_ww_ingestelde_temp_ww
+            above: 62
+        then:
+          - alias: Zet de boiler terug op de 58 van EPEX
+            action: number.set_value
+            target:
+              entity_id: number.ecoforest_ecoforest_ww_ingestelde_temp_ww
+            data:
+              value: 58
+mode: single

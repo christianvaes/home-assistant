@@ -1,0 +1,67 @@
+alias: Warmtepomp koeling uit bij hoge stroomprijs
+description: Zet de warmtepomp uit als de stroomprijs boven 0,50 komt en het morgen warm wordt. Zakt de prijs een uur lang onder 0,50, dan gaat hij weer aan.
+triggers:
+  - alias: Prijs boven 0,50
+    trigger: numeric_state
+    entity_id:
+      - sensor.zonneplan_current_electricity_tariff
+    above: 0.5
+    id: duur
+  - alias: Prijs een uur lang onder 0,50
+    trigger: numeric_state
+    entity_id:
+      - sensor.zonneplan_current_electricity_tariff
+    below: 0.5
+    id: goedkoop
+    for:
+      hours: 1
+      minutes: 0
+      seconds: 0
+conditions: []
+actions:
+  - choose:
+      - alias: 'Dure prijs en het wordt warm: warmtepomp uit'
+        conditions:
+          - condition: trigger
+            id: duur
+          - alias: Alleen als het morgen boven 20 graden wordt
+            condition: numeric_state
+            entity_id: sensor.temperatuur_verwachting_1d
+            above: 20
+          - alias: Alleen als hij nu aan staat
+            condition: state
+            entity_id: select.ecoforest_ecoforest_warmtepomp
+            state: Ingeschakeld
+        sequence:
+          - alias: Zet de warmtepomp uit
+            action: select.select_option
+            target:
+              entity_id: select.ecoforest_ecoforest_warmtepomp
+            data:
+              option: Uit
+          - alias: Stuur een melding
+            action: notify.mobile_app_samsung_galaxy_s26_christian
+            data:
+              title: Warmtepomp koeling UIT
+              message: Stroomprijs {{ trigger.to_state.state | float | round(3) }} €/kWh (boven 0,50) en buitenverwachting {{ states('sensor.temperatuur_verwachting_1d') }} °C. Warmtepomp op 'Uit' gezet.
+      - alias: 'Prijs weer normaal: warmtepomp aan'
+        conditions:
+          - condition: trigger
+            id: goedkoop
+          - alias: Alleen als wij hem hebben uitgezet
+            condition: state
+            entity_id: select.ecoforest_ecoforest_warmtepomp
+            state: Uit
+        sequence:
+          - alias: Zet de warmtepomp weer aan
+            action: select.select_option
+            target:
+              entity_id: select.ecoforest_ecoforest_warmtepomp
+            data:
+              option: Ingeschakeld
+          - alias: Stuur een melding
+            action: notify.mobile_app_samsung_galaxy_s26_christian
+            data:
+              title: Warmtepomp weer AAN
+              message: Stroomprijs {{ trigger.to_state.state | float | round(3) }} €/kWh (onder 0,50). Warmtepomp weer op 'Ingeschakeld' gezet.
+mode: single
