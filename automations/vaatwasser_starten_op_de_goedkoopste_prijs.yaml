@@ -1,49 +1,70 @@
 alias: Vaatwasser starten op de goedkoopste prijs
-description: Je ruimt in, drukt op start op afstand aan de binnenkant en sluit de deur. Home Assistant start dan het op de machine geselecteerde programma met een uitsteltijd tot het goedkoopste venster. De machine telt zelf af, dus dit werkt ook als Home Assistant herstart. Zonder de knop start hij niets.
+description: >-
+  Druk op start op afstand en sluit de deur. Home Assistant zet auto 2 en start dat met
+  uitstel tot het goedkoopste blok dat voor 18:00 klaar is. Lukt dat vandaag niet meer, dan
+  start hij meteen. Na 18:00 mikt hij op morgen voor 18:00.
 triggers:
-  - alias: Deur is gesloten
+  - alias: Deur wordt gesloten
     trigger: state
     entity_id: sensor.vaatwasser_deur
     to: closed
+    not_from:
+      - unavailable
+      - unknown
+    note: Zonder not_from vuurt hij ook als de integratie even wegvalt en terugkomt.
 conditions:
-  - alias: Hij staat klaar om te starten
+  - alias: De machine is vrij
     condition: state
     entity_id: sensor.vaatwasser_operation_state
     state: ready
+    note: Draait hij al of staat er een uitgestelde start klaar, dan blijft dat zo.
 variables:
-  programma_duur_uren: 2.5
-  kwartieren: 10
+  kwartieren: 10                                  # auto 2 duurt ongeveer 2,5 uur
+  prijssensor: sensor.nordpool_kwh_nl_eur_4_10_0  # kwartierprijzen van vandaag en morgen
 actions:
-  - alias: Wachten tot start op afstand is doorgekomen, anders stoppen
-    wait_template: '{{ is_state(''binary_sensor.vaatwasser_remote_start'',''on'') }}'
+  - alias: Wachten tot de knop binnen is, hoogstens een minuut
+    wait_template: >-
+      {{ is_state('binary_sensor.vaatwasser_remote_start','on')
+         and is_state('sensor.vaatwasser_deur','closed') }}
     timeout:
       seconds: 60
     continue_on_timeout: false
-    note: De cloud doet er ongeveer 25 seconden over. Is de knop niet ingedrukt, dan stopt de automatisering hier en gebeurt er niets.
+    note: >-
+      Staat de knop al aan, dan gaat hij meteen door. Een conditie kan dit niet: die oordeelt
+      eenmalig en stopt als de melding nog onderweg is. Gaat de deur weer open, dan stopt hij.
+
   - variables:
       start_seconden: |-
-        {% set laatste_start = today_at('18:00')
-             + timedelta(days=1 if now() >= today_at('18:00') else 0)
-             - timedelta(hours=programma_duur_uren) %}
-        {% set toekomst = ((state_attr('sensor.nordpool_kwh_nl_eur_4_10_0','raw_today') or [])
-             + (state_attr('sensor.nordpool_kwh_nl_eur_4_10_0','raw_tomorrow') or []))
+        {# uiterlijk klaar om 18:00, en vanaf 18:00 geldt 18:00 morgen #}
+        {% set klaar_om = today_at('18:00') + timedelta(days=1 if now() >= today_at('18:00') else 0) %}
+        {% set uiterste_start = klaar_om - timedelta(minutes=15 * kwartieren) %}
+
+        {# alle kwartieren die nog komen, met een prijs #}
+        {% set kw = ((state_attr(prijssensor,'raw_today') or []) + (state_attr(prijssensor,'raw_tomorrow') or []))
              | rejectattr('value','none') | selectattr('start','gt', now()) | list %}
-        {% set ns = namespace(best=none, prijs=999) %}
-        {% for i in range(0, toekomst | count - kwartieren + 1) %}
-          {% if toekomst[i].start <= laatste_start %}
-            {% set gem = (toekomst[i:i + kwartieren] | map(attribute='value') | sum) / kwartieren %}
-            {% if gem < ns.prijs %}{% set ns.prijs = gem %}{% set ns.best = toekomst[i].start %}{% endif %}
-          {% endif %}
+
+        {# per mogelijke starttijd een paar [totaalprijs, starttijd] #}
+        {% set ns = namespace(opties=[]) %}
+        {% for i in range(kw | count - kwartieren + 1) if kw[i].start <= uiterste_start %}
+          {% set ns.opties = ns.opties + [[kw[i:i + kwartieren] | map(attribute='value') | sum, kw[i].start]] %}
         {% endfor %}
-        {{ ((ns.best - now()).total_seconds()) | round(0) | int if ns.best else 0 }}
-    note: Rechtstreeks op de Nordpool-integratie, niet op het Gielz-package. De start-velden zijn datetimes, dus vergelijken zonder as_datetime. De rejectattr vangt af dat morgen nog niet gepubliceerd is, want lege kwartieren laten de som klappen.
-  - alias: Alleen als er een venster is dat binnen 24 uur valt
-    condition: template
-    value_template: '{{ start_seconden > 0 and start_seconden <= 86400 }}'
-    note: De vaatwasser accepteert maximaal 86400 seconden uitstel.
-  - alias: Start het geselecteerde programma met uitstel tot het goedkoopste venster
+
+        {# min pakt de goedkoopste, [1] is daarvan de starttijd #}
+        {{ ((ns.opties | min)[1] - now()).total_seconds() | int if ns.opties else 0 }}
+    note: 0 betekent meteen starten, dus geen blok meer voor 18:00 of geen prijzen beschikbaar.
+
+  - alias: Zet het programma op auto 2
+    action: select.select_option
+    target:
+      entity_id: select.vaatwasser_selected_program
+    data:
+      option: dishcare_dishwasher_program_auto_2
+    continue_on_error: true
+    note: Na een afgebroken programma staat er soms niets gekozen en weigert Home Connect te starten.
+
+  - alias: Start het programma, met uitstel of meteen
     action: home_connect.start_selected_program
     data:
       device_id: 956af9be1c1a7a456436fd8ead80c97d
-      b_s_h_common_option_start_in_relative: '{{ start_seconden }}'
+      b_s_h_common_option_start_in_relative: "{{ start_seconden }}"
 mode: restart
