@@ -1,39 +1,48 @@
 alias: Warmtepomp koeling uit bij hoge stroomprijs
-description: Zet de warmtepomp uit als de stroomprijs boven 0,50 komt en het vandaag warm is. Zakt de prijs een uur lang onder 0,50, dan gaat hij weer aan.
+description: |-
+  Zet de warmtepomp uit zodra de stroomprijs boven 0,50 komt op een warme dag, en weer aan
+  als de laatste vier kwartierprijzen onder 0,50 liggen. Zo staat hij altijd minstens een
+  uur uit en schakelt hij niet heen en weer.
+
+  Hij kijkt elk kwartier op de klok in plaats van te wachten op een nieuwe prijs, zodat hij
+  blijft werken als de prijssensor stilvalt.
+
 triggers:
-  - alias: Prijs boven 0,50
-    trigger: numeric_state
-    entity_id:
-      - sensor.nordpool_kwh_nl_eur_4_10_0
-    above: 0.5
-    id: duur
-    note: Nordpool met de all-in prijs uit de template, dus dezelfde schaal als Zonneplan. Per kwartier in plaats van per uur.
-  - alias: Prijs een uur lang onder 0,50
-    trigger: numeric_state
-    entity_id:
-      - sensor.nordpool_kwh_nl_eur_4_10_0
-    below: 0.5
-    id: goedkoop
-    for:
-      hours: 1
-      minutes: 0
-      seconds: 0
+  - alias: Elk kwartier de prijs bekijken
+    trigger: time_pattern
+    minutes: /15
+    seconds: 30
+    note: Geen timer die een herstart kan wissen. Op :30 omdat de prijs pas rond :00,3 binnen is.
+
 conditions: []
+
 actions:
   - choose:
+
+      # ==================================================================
+      # UIT: dure stroom op een warme dag, koelen kost dan te veel
+      # ==================================================================
       - alias: 'Dure prijs en het wordt warm: warmtepomp uit'
         conditions:
-          - condition: trigger
-            id: duur
+          - alias: Prijs boven 0,50
+            condition: numeric_state
+            entity_id: sensor.nordpool_kwh_nl_eur_4_10_0
+            above: 0.5
+            note: Nordpool per kwartier, de all-in prijs die je ook echt betaalt.
+
           - alias: Alleen als het vandaag boven 20 graden wordt
             condition: numeric_state
             entity_id: sensor.temperatuur_verwachting_1d
             above: 20
-            note: Dagmaximum van vandaag. De helper pakt Buienradar en valt terug op KNMI, zodat een storing bij een van beide hem niet stillegt.
-          - alias: Alleen als hij nu aan staat
+            note: >-
+              Dagmaximum van vandaag, niet de temperatuur van nu. Losse helper die Buienradar
+              leest en terugvalt op KNMI als die wegvalt.
+
+          - alias: Alleen als de pomp nu aan staat
             condition: state
             entity_id: select.ecoforest_ecoforest_warmtepomp
             state: Ingeschakeld
+            note: Anders overschrijft hij elk kwartier een handmatige stand als Noodbedrijf of EPEX.
         sequence:
           - alias: Zet de warmtepomp uit
             action: select.select_option
@@ -41,19 +50,40 @@ actions:
               entity_id: select.ecoforest_ecoforest_warmtepomp
             data:
               option: Uit
+
           - alias: Stuur een melding
             action: notify.mobile_app_samsung_galaxy_s26_christian
             data:
               title: Warmtepomp koeling UIT
-              message: Stroomprijs {{ trigger.to_state.state | float | round(3) }} €/kWh (boven 0,50) en dagmaximum {{ states('sensor.temperatuur_verwachting_1d') }} °C. Warmtepomp op 'Uit' gezet.
+              message: >-
+                Stroomprijs {{ states('sensor.nordpool_kwh_nl_eur_4_10_0') }} €/kWh (boven 0,50)
+                en dagmaximum {{ states('sensor.temperatuur_verwachting_1d') }} °C.
+                Warmtepomp op 'Uit' gezet.
+
+      # ==================================================================
+      # AAN: pas terug als de prijs een heel uur laag is gebleven
+      # ==================================================================
       - alias: 'Prijs weer normaal: warmtepomp aan'
         conditions:
-          - condition: trigger
-            id: goedkoop
-          - alias: Alleen als wij hem hebben uitgezet
+          - alias: Alleen als de pomp nu uit staat
             condition: state
             entity_id: select.ecoforest_ecoforest_warmtepomp
             state: Uit
+            note: Laat Noodbedrijf en EPEX met rust.
+
+          - alias: De laatste vier kwartieren lagen onder 0,50
+            condition: template
+            value_template: >-
+              {# de kwartierprijzen van vandaag die al geweest zijn #}
+              {% set prijzen = state_attr('sensor.nordpool_kwh_nl_eur_4_10_0','raw_today')
+                 | selectattr('start','le', now()) | map(attribute='value') | list %}
+              {# de laatste vier daarvan vormen samen het afgelopen uur #}
+              {% set laatste_uur = prijzen[-4:] %}
+              {# het moeten er vier zijn, want gisteren staat niet in deze lijst #}
+              {{ laatste_uur | count == 4 and laatste_uur | max < 0.5 }}
+            note: >-
+              Hij gaat alleen uit in een duur kwartier, dus vier goedkope kwartieren betekent
+              minstens een uur uit. Leest de prijslijst en niet een timer.
         sequence:
           - alias: Zet de warmtepomp weer aan
             action: select.select_option
@@ -61,9 +91,13 @@ actions:
               entity_id: select.ecoforest_ecoforest_warmtepomp
             data:
               option: Ingeschakeld
+
           - alias: Stuur een melding
             action: notify.mobile_app_samsung_galaxy_s26_christian
             data:
               title: Warmtepomp weer AAN
-              message: Stroomprijs {{ trigger.to_state.state | float | round(3) }} €/kWh (onder 0,50). Warmtepomp weer op 'Ingeschakeld' gezet.
+              message: >-
+                Stroomprijs {{ states('sensor.nordpool_kwh_nl_eur_4_10_0') }} €/kWh (onder 0,50)
+                en dat al een uur. Warmtepomp weer op 'Ingeschakeld' gezet.
+
 mode: single
