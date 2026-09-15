@@ -41,7 +41,7 @@ triggers:
     note: Zo vaak verandert de prijs.
 
 variables:
-  accu_inhoud: 11.04                # kWh totaal
+  accu_inhoud: 13.92                # kWh totaal
   soc_minimum: 10                   # gelijk aan het input_number van het package
   accu_ruimte_leeg: >-              # bruikbare kWh, afgeleid uit de twee hierboven
     {{ accu_inhoud * (100 - soc_minimum) / 100 }}
