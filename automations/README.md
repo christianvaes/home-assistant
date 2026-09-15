@@ -7,10 +7,10 @@ left over. Each one is a separate YAML file.
 
 | file | what it does |
 |---|---|
-| `accu_dagplan_en_bijplan.yaml` | Fills the Zendure battery with solar and buys the rest in the cheapest quarter-hours, planned on the solar forecast. Sets the battery mode |
-| `vaatwasser_starten_op_de_goedkoopste_prijs.yaml` | Starts the selected program on the Siemens dishwasher, delayed until the cheapest window |
-| `boiler_verhogen_zonoverschot.yaml` | Raises the hot water setpoint on the Ecoforest heat pump when there is really solar left over |
-| `warmtepomp_koeling_uit_bij_hoge_stroomprijs.yaml` | Turns the Ecoforest heat pump off above EUR 0.50 per kWh when warm weather is forecast |
+| [`accu_dagplan_en_bijplan.yaml`](accu_dagplan_en_bijplan.yaml) | Fills the Zendure battery with solar and buys the rest in the cheapest quarter-hours, planned on the solar forecast. Sets the battery mode |
+| [`vaatwasser_starten_op_de_goedkoopste_prijs.yaml`](vaatwasser_starten_op_de_goedkoopste_prijs.yaml) | Starts the selected program on the Siemens dishwasher, delayed until the cheapest window |
+| [`boiler_verhogen_zonoverschot.yaml`](boiler_verhogen_zonoverschot.yaml) | Raises the hot water setpoint on the Ecoforest heat pump when there is really solar left over |
+| [`warmtepomp_koeling_uit_bij_hoge_stroomprijs.yaml`](warmtepomp_koeling_uit_bij_hoge_stroomprijs.yaml) | Turns the Ecoforest heat pump off above EUR 0.50 per kWh when warm weather is forecast |
 
 ## Hardware
 
@@ -24,7 +24,7 @@ What I run. Other models from the same brands work, with different entity IDs.
 
 ## Battery charging/discharging logic
 
-Every quarter-hour `accu_dagplan_en_bijplan.yaml` picks a mode, based on the
+Every quarter-hour [`accu_dagplan_en_bijplan.yaml`](accu_dagplan_en_bijplan.yaml) picks a mode, based on the
 solar left over, the price, and whether the forecast fills the battery without
 the grid.
 
@@ -53,7 +53,7 @@ it. On a flat day nothing qualifies.
 
 ## Measured assumptions
 
-The numbers in `accu_dagplan_en_bijplan.yaml` come from measurements on my own
+The numbers in [`accu_dagplan_en_bijplan.yaml`](accu_dagplan_en_bijplan.yaml) come from measurements on my own
 installation.
 
 | variable | value | source |
@@ -64,5 +64,5 @@ installation.
 | `zon_basislast` | 1.5 kWh | same |
 | `rendement` | 0.87 | round trip, just below the measured 87.6 percent |
 
-`boiler_verhogen_zonoverschot.yaml` uses a threshold of 2400 W, based on the
+[`boiler_verhogen_zonoverschot.yaml`](boiler_verhogen_zonoverschot.yaml) uses a threshold of 2400 W, based on the
 measured 2177 W draw during water heating.
