@@ -41,15 +41,24 @@ triggers:
     note: Zo vaak verandert de prijs.
 
 variables:
-  accu_inhoud: 13.92                # kWh totaal
-  soc_minimum: 10                   # gelijk aan het input_number van het package
-  accu_ruimte_leeg: >-              # bruikbare kWh, afgeleid uit de twee hierboven
-    {{ accu_inhoud * (100 - soc_minimum) / 100 }}
-  laadvermogen_per_kwartier: 0.53   # kWh per kwartier, gemeten
+  # ---- aan te passen aan jouw situatie ----
+  rendement: 0.87                   # round trip, iets onder de gemeten 87,6 procent
   zon_naar_accu_deel: 0.55          # deel van de zon dat de accu haalt
   zon_basislast: 1.5                # kWh aftrek bij weinig zon
   laadkwartieren_maximaal: 32       # acht uur
-  rendement: 0.87                   # round trip, iets onder de gemeten 87,6 procent
+
+  # ---- waarden komen uit het Gielz-package, valt terug op de standaardwaarde ----
+  accu_inhoud: >-                   # kWh totaal, zoals het package hem meldt
+    {{ states('sensor.zendure_2400_ac_totale_capaciteit') | float(13.92) }}
+  soc_minimum: >-                   # bodem, zoals ingesteld in het package
+    {{ states('input_number.zendure_2400_ac_minimaal_toegestaan_laadpercentage') | float(10) }}
+  soc_maximum: >-                   # plafond, zoals ingesteld in het package
+    {{ states('input_number.zendure_2400_ac_maximaal_toegestaan_laadpercentage') | float(100) }}
+  accu_ruimte_leeg: >-              # bruikbare kWh tussen bodem en plafond
+    {{ accu_inhoud * (soc_maximum - soc_minimum) / 100 }}
+  laadvermogen_per_kwartier: >-     # kW maal rendement, gedeeld door vier kwartieren
+    {{ (states('input_number.zendure_2400_ac_max_oplaadvermogen') | float(2400) / 1000)
+       * rendement / 4 }}
 
 actions:
   - choose:
@@ -108,7 +117,7 @@ actions:
               soc: >-                       # echte vulling, procent
                 {{ states('sensor.zendure_2400_ac_laadpercentage') | float(soc_minimum) }}
               ruimte_in_accu: >-            # wat er nu nog in past, kWh
-                {{ [ accu_inhoud * (100 - soc) / 100, 0 ] | max }}
+                {{ [ accu_inhoud * (soc_maximum - soc) / 100, 0 ] | max }}
               aan_te_vullen: >-             # rest die uit het net moet, kWh
                 {{ [ ruimte_in_accu - zonoverschot, 0 ] | max }}
               verstreken: >-                # goedkope kwartieren die al afgelopen zijn
