@@ -58,8 +58,8 @@ installation.
 
 | variable | value | source |
 |---|---|---|
-| `accu_inhoud` | 11.04 kWh | Zendure SolarFlow 2400 AC+ |
-| `laadvermogen_per_kwartier` | 0.53 kWh | measured at full charging power |
+| `accu_inhoud` | 13.92 kWh | Zendure SolarFlow 2400 AC+ with five packs |
+| `laadvermogen_per_kwartier` | 0.52 kWh | 2400 W charging power, times the round trip |
 | `zon_naar_accu_deel` | 0.55 | calibrated on 355 days of generation and feed-in |
 | `zon_basislast` | 1.5 kWh | same |
 | `rendement` | 0.87 | round trip, just below the measured 87.6 percent |
