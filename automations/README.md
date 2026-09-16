@@ -63,6 +63,7 @@ installation.
 | `zon_naar_accu_deel` | 0.55 | calibrated on 355 days of generation and feed-in |
 | `zon_basislast` | 1.5 kWh | same |
 | `rendement` | 0.87 | round trip, just below the measured 87.6 percent |
+| `zon_zekerheid` | 0.9 | Solcast runs high more often than low; a bigger margin would buy solar you would have had for free |
 
 [`boiler_verhogen_zonoverschot.yaml`](boiler_verhogen_zonoverschot.yaml) uses a threshold of 2400 W, based on the
 measured 2177 W draw during water heating.

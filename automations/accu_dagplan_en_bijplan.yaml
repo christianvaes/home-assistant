@@ -19,13 +19,14 @@ description: |-
   - accu vol uit zon | de zon levert vandaag genoeg om de accu helemaal te vullen | er hoeft niets uit het net bij
   - bijladen op net | dit kwartier is door het package aangewezen om de accu uit het net te laden
   - goedkoopste kwartier | de prijs ligt onder de laagste van vandaag gedeeld door je rendement | en onder het daggemiddelde | op een vlakke dag bestaat er dus geen dal
+  - nacht | zolang de zon onder is | dan plannen we alsof de accu bij zonsopgang leeg is, zodat goedkope nachtkwartieren nooit gemist worden; te veel kan niet, het package stopt op 100 procent | overdag rekenen we met wat er echt in zit
 
 triggers:
   - alias: Avond, plan voor morgen
     trigger: time
     at: "23:01:00"
     id: avond
-    note: Prijzen voor morgen zijn dan bekend. Op :01 zodat het niet botst.
+    note: Laat genoeg om vanavond nog op het plan van vandaag te draaien, vroeg genoeg om de modus vóór middernacht goed te hebben. Op :01 zodat het niet botst met de modustak op het hele uur.
 
   - alias: Dag, bijstellen op de werkelijke zon
     trigger: time_pattern
@@ -42,63 +43,64 @@ triggers:
 
 variables:
   # ---- aan te passen aan jouw situatie ----
-  rendement: 0.87                   # round trip, iets onder de gemeten 87,6 procent
-  zon_naar_accu_deel: 0.55          # deel van de zon dat de accu haalt
-  zon_basislast: 1.5                # kWh aftrek bij weinig zon
-  laadkwartieren_maximaal: 32       # acht uur
+  rendement: 0.87                   # round trip, iets onder de bij mij gemeten 87,6 procent; het package heeft er een sensor voor
+  zon_naar_accu_deel: 0.55          # deel van de zonnestroom dat het huis overdag niet zelf gebruikt en naar de accu gaat; bij mij 55 procent, teruglevering gedeeld door opwek
+  zon_basislast: 1.5                # kWh zonnestroom per dag die het huis eerst zelf opmaakt, pas daarna gaat er iets naar de accu; bij mij 1,5
+  zon_zekerheid: 0.9                # veiligheidsmarge: reken met 90 procent van de Solcast-prognose, want die valt vaker tegen dan mee; lager is meer marge en koopt vaker zon in die je gratis had gehad
 
-  # ---- waarden komen uit het Gielz-package, valt terug op de standaardwaarde ----
-  accu_inhoud: >-                   # kWh totaal, zoals het package hem meldt
+  # ---- waarden uit het Zendure zenSDK-package van Gielz1986, met mijn waarden als terugval als een sensor wegvalt ----
+  accu_inhoud: >-                   # totale inhoud van de accu in kWh
     {{ states('sensor.zendure_2400_ac_totale_capaciteit') | float(13.92) }}
-  soc_minimum: >-                   # bodem, zoals ingesteld in het package
+  soc_minimum: >-                   # laagste percentage waartoe het package de accu laat leeglopen
     {{ states('input_number.zendure_2400_ac_minimaal_toegestaan_laadpercentage') | float(10) }}
-  soc_maximum: >-                   # plafond, zoals ingesteld in het package
+  soc_maximum: >-                   # hoogste percentage waartoe het package de accu laat vollopen
     {{ states('input_number.zendure_2400_ac_maximaal_toegestaan_laadpercentage') | float(100) }}
-  accu_ruimte_leeg: >-              # bruikbare kWh tussen bodem en plafond
-    {{ accu_inhoud * (soc_maximum - soc_minimum) / 100 }}
-  laadvermogen_per_kwartier: >-     # kW maal rendement, gedeeld door vier kwartieren
+  laadvermogen_per_kwartier: >-     # kWh die er in een kwartier laden echt bijkomt: laadvermogen in kW, maal rendement, gedeeld door vier
     {{ (states('input_number.zendure_2400_ac_max_oplaadvermogen') | float(2400) / 1000)
        * rendement / 4 }}
+
+  # ---- hoeveel er in de accu past op het moment dat de zon weer schijnt ----
+  soc: >-                           # hoe vol de accu nu is, in procenten
+    {{ states('sensor.zendure_2400_ac_laadpercentage') | float(soc_minimum) }}
+  ruimte_in_accu: >-                # hoeveel kWh er nog in de accu bij kan. Overdag: de echte ruimte van nu. 's Nachts: de hele accu, alsof hij bij zonsopgang leeg is; zo mist hij nooit goedkope nachtkwartieren, en te veel kan niet want het package stopt op 100 procent
+    {{ accu_inhoud * (soc_maximum - soc_minimum) / 100
+       if is_state('sun.sun','below_horizon')
+       else [ accu_inhoud * (soc_maximum - soc) / 100, 0 ] | max }}
+
+  # ---- hoeveel er dan nog uit het net bij moet ----
+  zon: >-                           # Solcast-prognose in kWh met de marge erop: 's avonds die voor morgen, anders die voor de rest van vandaag
+    {{ (states('sensor.solcast_pv_forecast_forecast_tomorrow') | float(0)
+        if trigger.id == 'avond'
+        else states('sensor.solcast_pv_forecast_forecast_remaining_today') | float(0))
+       * zon_zekerheid }}
+  zonoverschot: >-                  # hoeveel kWh daarvan in de accu terechtkomt
+    {{ [ zon_naar_accu_deel * zon - zon_basislast, 0 ] | max }}
+  aan_te_vullen: >-                 # hoeveel kWh er dan nog uit het net bij moet
+    {{ [ ruimte_in_accu - zonoverschot, 0 ] | max }}
+  nodig: >-                         # aantal kwartieren laden uit het net, naar boven afgerond
+    {{ (aan_te_vullen / laadvermogen_per_kwartier) | round(3) | round(0, 'ceil') | int }}
 
 actions:
   - choose:
 
       # ==================================================================
-      # AVOND: hoeveel moet er morgen uit het net bij?
+      # AVOND: schrijf het plan voor morgen
       # ==================================================================
       - alias: Avond, plan voor morgen
         conditions:
           - condition: trigger
             id: avond
         sequence:
-          - variables:
-              zon: >-                       # zonprognose voor morgen, kWh
-                {{ states('sensor.solcast_pv_forecast_forecast_tomorrow') | float(0) }}
-              zonoverschot: >-              # wat daarvan in de accu belandt, kWh
-                {{ [ zon_naar_accu_deel * zon - zon_basislast, 0 ] | max }}
-              aan_te_vullen: >-             # rest die uit het net moet, kWh
-                {{ [ accu_ruimte_leeg | float(0) - zonoverschot, 0 ] | max }}
-              laadkwartieren: >-            # naar boven afgerond, halve kwartieren bestaan niet
-                {{ (aan_te_vullen / laadvermogen_per_kwartier)
-                   | round(3) | round(0, 'ceil') | int }}
-
           - alias: Schrijf het aantal laadkwartieren voor morgen
             action: input_number.set_value
             target:
               entity_id: input_number.dynamisch_goedkoopste_x_periode_morgen
             data:
-              value: "{{ laadkwartieren }}"
-            note: Ook een 0, anders blijft gisteren staan.
-
-          - alias: Zet alvast de modus voor vannacht
-            action: input_select.select_option
-            target:
-              entity_id: input_select.zendure_2400_ac_modus_selecteren
-            data:
-              option: "{{ 'Nul op de meter' if laadkwartieren == 0 else 'Dynamisch NOM' }}"
+              value: "{{ nodig }}"
+            note: Ook een 0 wordt geschreven, anders blijft het getal van gisteren staan.
 
       # ==================================================================
-      # DAG: bijstellen op de echte SoC en de bijgewerkte prognose
+      # DAG: stel het plan van vandaag elk uur bij
       # ==================================================================
       - alias: Dag, bijstellen op de werkelijke zon
         conditions:
@@ -107,35 +109,21 @@ actions:
           - alias: Niet na zonsondergang
             condition: sun
             before: sunset
-            note: Dan is de resterende prognose nul en koopt hij de accu vol.
+            note: Na zonsondergang is de Solcast-prognose voor de rest van de dag nul, dan zou hij de hele accu uit het net kopen.
         sequence:
           - variables:
-              zon: >-                       # wat er vandaag nog aan zon komt, kWh
-                {{ states('sensor.solcast_pv_forecast_forecast_remaining_today') | float(0) }}
-              zonoverschot: >-              # wat daarvan in de accu belandt, kWh
-                {{ [ zon_naar_accu_deel * zon - zon_basislast, 0 ] | max }}
-              soc: >-                       # echte vulling, procent
-                {{ states('sensor.zendure_2400_ac_laadpercentage') | float(soc_minimum) }}
-              ruimte_in_accu: >-            # wat er nu nog in past, kWh
-                {{ [ accu_inhoud * (soc_maximum - soc) / 100, 0 ] | max }}
-              aan_te_vullen: >-             # rest die uit het net moet, kWh
-                {{ [ ruimte_in_accu - zonoverschot, 0 ] | max }}
-              verstreken: >-                # goedkope kwartieren die al afgelopen zijn
-                {{ (state_attr('sensor.dynamisch_goedkoopste_periode','raw_today') or [])
-                   | selectattr('goedkoop','eq','ja')
-                   | selectattr('end','le', now().isoformat()) | list | count }}
-              nodig: >-                     # kwartieren laden die nog nodig zijn
-                {{ (aan_te_vullen / laadvermogen_per_kwartier)
-                   | round(3) | round(0, 'ceil') | int }}
-              laadkwartieren: >-            # plus de afgelopen kwartieren, begrensd op het maximum
-                {{ [ nodig + verstreken, laadkwartieren_maximaal ] | min if nodig > 0 else 0 }}
-
-          - alias: Alleen schrijven als het getal verandert
-            condition: template
-            value_template: >-
-              {{ states('input_number.dynamisch_goedkoopste_x_periode') | float(-1)
-                 != laadkwartieren }}
-            note: De min 1 zorgt dat hij bij een leeg veld toch schrijft.
+              laadkwartieren: >-            # het aantal kwartieren dat we aan het package doorgeven; het package wijst dan de zoveel goedkoopste kwartieren van de dag aan om in te laden
+                {# het package telt daarbij ook kwartieren mee die al voorbij zijn, dus we tellen van goedkoop naar duur door tot er 'nodig' kwartieren tussen zitten die nog komen #}
+                {# kwartieren duurder dan het daggemiddelde doen nooit mee: laden kost dan meer dan het 's avonds oplevert #}
+                {% set prijzen = state_attr('sensor.dynamisch_goedkoopste_periode','raw_today') or [] %}
+                {% set gemiddelde = prijzen | map(attribute='value') | average if prijzen else 0 %}
+                {# twee tellers in een namespace, want een gewone variabele die je in een for-lus ophoogt blijft buiten de lus niet staan #}
+                {% set ns = namespace(x=0, toekomst=0) %}
+                {% for q in prijzen | sort(attribute='value') if ns.toekomst < nodig and q.value < gemiddelde %}
+                  {% set ns.x = ns.x + 1 %}
+                  {% if (q.end | as_datetime) > now() %}{% set ns.toekomst = ns.toekomst + 1 %}{% endif %}
+                {% endfor %}
+                {{ ns.x if nodig > 0 else 0 }}
 
           - alias: Stel het aantal laadkwartieren voor vandaag bij
             action: input_number.set_value
@@ -154,31 +142,24 @@ actions:
             id: modus
         sequence:
           - variables:
-              in_dal: >-                    # 999 als terugval: kapotte sensor is nooit dal
+              in_dal: >-                    # is dit nu een goedkoopste kwartier zoals in de beschrijving; een kapotte sensor geeft 999 en telt dus nooit als goedkoop
                 {% set p = (state_attr('sensor.dynamisch_nordpool','raw_today') or [])
                            | map(attribute='value') | list | sort %}
                 {% set prijs_nu = states('sensor.dynamisch_nordpool') | float(999) %}
                 {{ p | count > 0
                    and prijs_nu < p | first / rendement
                    and prijs_nu < p | average }}
-              laadkwartieren: >-            # na 23:00 telt het plan voor morgen
+              plan: >-                      # het aantal laadkwartieren dat nu geldt: vanaf 23:01 dat van morgen, daarvoor dat van vandaag
                 {{ states('input_number.dynamisch_goedkoopste_x_periode_morgen') | float(0)
-                   if now().hour >= 23
+                   if now() >= today_at('23:01')
                    else states('input_number.dynamisch_goedkoopste_x_periode') | float(0) }}
-
-          - variables:
-              gewenst: >-                   # de vier regels uit de beschrijving
+              gewenst: >-                   # de modus volgens de vier regels uit de beschrijving
                 {{ 'Dynamisch NOM' if is_state('sensor.dynamisch_goedkoopste_periode','Ja')
-                   else 'Alleen slim opladen' if (in_dal and laadkwartieren > 0)
-                   else 'Nul op de meter' if laadkwartieren == 0
+                   else 'Alleen slim opladen' if (in_dal and plan > 0)
+                   else 'Nul op de meter' if plan == 0
                    else 'Dynamisch NOM' }}
 
-          - alias: Alleen schakelen als de modus echt moet veranderen
-            condition: template
-            value_template: >-
-              {{ states('input_select.zendure_2400_ac_modus_selecteren') != gewenst }}
-
-          - alias: Zet de gewenste modus
+          - alias: Zet de modus
             action: input_select.select_option
             target:
               entity_id: input_select.zendure_2400_ac_modus_selecteren
