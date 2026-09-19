@@ -44,12 +44,23 @@ it. On a flat day nothing qualifies.
 
 ## Dependencies
 
-- **Zendure zenSDK package by Gielz1986** for the battery entities and the
-  dynamic price sensors
-- **Solcast** for the solar forecast
-- **Home Connect** for the dishwasher
-- **Eplucon** and the **tech** integration for the Ecoforest heat pump
-- A **Nordpool** sensor via HACS for the quarter-hour prices
+Not every automation needs everything.
+
+| automation | needs |
+|---|---|
+| [`accu_dagplan_en_bijplan.yaml`](accu_dagplan_en_bijplan.yaml) | zenSDK package, Solcast, Nordpool |
+| [`vaatwasser_starten_op_de_goedkoopste_prijs.yaml`](vaatwasser_starten_op_de_goedkoopste_prijs.yaml) | Home Connect, Nordpool |
+| [`boiler_verhogen_zonoverschot.yaml`](boiler_verhogen_zonoverschot.yaml) | Tech Controllers, zenSDK package, the P1 meter, and a power meter on the heat pump circuit |
+| [`warmtepomp_koeling_uit_bij_hoge_stroomprijs.yaml`](warmtepomp_koeling_uit_bij_hoge_stroomprijs.yaml) | Tech Controllers, Nordpool, and a sensor with today's forecast high, from any weather integration |
+
+| integration | provides |
+|---|---|
+| [Zendure zenSDK package](https://github.com/Gielz1986/Zendure-HA-zenSDK) | the battery entities, the mode selector and the dynamic price sensors |
+| [Solcast](https://github.com/BJReplay/ha-solcast-solar) | the solar forecast for today and tomorrow |
+| [Nordpool](https://github.com/custom-components/nordpool/) | the quarter-hour prices, tax and surcharges included. Take the HACS one, not the Nord Pool integration that ships with Home Assistant |
+| [Home Connect](https://www.home-assistant.io/integrations/home_connect) | the dishwasher door, program and remote start |
+| [Tech Controllers](https://github.com/mariusz-ostoja-swierczynski/tech-controllers) | the heat pump: the hot water setpoint and the on/off switch |
+| [Eplucon](https://github.com/koenhendriks/ha-eplucon) | readings from the same heat pump, used here only for the water temperature in a notification |
 
 ## Measured assumptions
 
