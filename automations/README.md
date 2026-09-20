@@ -24,9 +24,13 @@ What I run. Other models from the same brands work, with different entity IDs.
 
 ## Battery charging/discharging logic
 
-Every quarter-hour [`accu_dagplan_en_bijplan.yaml`](accu_dagplan_en_bijplan.yaml) picks a mode, based on the
-solar left over, the price, and whether the forecast fills the battery without
-the grid.
+[`accu_dagplan_en_bijplan.yaml`](accu_dagplan_en_bijplan.yaml) makes two decisions: which mode
+the battery runs in, and how much it tops up from the grid.
+
+### Choosing the mode
+
+Every quarter-hour it picks a mode, based on the solar left over, the price, and whether the
+forecast fills the battery without the grid.
 
 | solar left over | price | battery | what happens | mode |
 |---|---|---|---|---|
@@ -41,6 +45,41 @@ counts as cheap when the price is within the round trip loss of the lowest price
 of the day, and below the day average. Moving a kWh through the battery costs
 about 13 percent, so a smaller spread than that costs money instead of saving
 it. On a flat day nothing qualifies.
+
+### Topping up from the grid
+
+When the sun is not expected to fill the battery, the automation buys the rest in the cheapest
+quarters of the day. This is how it works out how much that is.
+
+```mermaid
+flowchart TD
+    F["Solcast forecast<br>rest of today, or tomorrow after 23:01"] -->|15 kWh| M["× zon_zekerheid<br>safety margin on the forecast<br><b>0.9</b>"]
+    M -->|13.5 kWh| S["× zon_naar_accu_deel<br>the share the house does not use itself<br><b>0.55</b>"]
+    S -->|7.4 kWh| B["− zon_basislast<br>what the house uses before anything is left<br><b>1.5 kWh</b>"]
+    B -->|5.9 kWh| E["Solar expected to reach the battery"]
+    C["Battery<br><b>13.92 kWh</b>, never used below <b>10%</b>"] --> D{"Is the sun down?"}
+    D -->|yes| R1["Room: the whole battery<br>as if it is empty at sunrise"]
+    D -->|no| R2["Room: what is really free right now"]
+    R1 -->|"13.92 × 90% = 12.5 kWh"| N
+    R2 -->|"13.92 × 80% = 11.1 kWh"| N
+    E -->|5.9 kWh| N["What is left to buy from the grid<br>the room minus the solar"]
+    N -->|5.2 kWh| Q["÷ laadvermogen_per_kwartier<br>what one quarter of charging adds<br><b>0.52 kWh</b> at 2400 W"]
+    Q -->|10| X["Number of cheapest quarters<br>handed to the package"]
+```
+
+The settings in the boxes are mine. [Measured assumptions](#measured-assumptions) says where they
+come from. The values on the arrows follow the example at the end of this section.
+
+The forecast covers the rest of today, not the whole day, so it shrinks as the day goes on.
+The package counts the cheapest quarters of the whole day, including ones already past, so the
+automation counts down the price list until enough of them are still ahead. That is why the
+number it writes keeps growing during the day, even when the battery needs less than it did an
+hour earlier.
+
+**A worked example.** A forecast of 15 kWh with the battery at 20 percent. The margin leaves
+13.5 kWh, of which 0.55 × 13.5 − 1.5 = 5.9 kWh is expected to reach the battery. The battery
+holds 13.92 kWh, so at 20 percent there is 11.1 kWh of room. That leaves 11.1 − 5.9 = 5.2 kWh
+to buy from the grid: 5.2 ÷ 0.52 = **10 quarters**.
 
 ## Dependencies
 
