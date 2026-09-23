@@ -20,20 +20,22 @@ description: |-
   - bijladen op net | dit kwartier is door het package aangewezen om de accu uit het net te laden
   - goedkoopste kwartier | de prijs ligt onder de laagste van vandaag gedeeld door je rendement | en onder het daggemiddelde | op een vlakke dag bestaat er dus geen dal
   - nacht | zolang de zon onder is | dan plannen we alsof de accu bij zonsopgang leeg is, zodat goedkope nachtkwartieren nooit gemist worden; te veel kan niet, het package stopt op 100 procent | overdag rekenen we met wat er echt in zit
+  - avond | van zonsondergang tot middernacht | de kwartieren die vandaag nog komen concurreren met heel morgen; alleen wat goedkoper is dan morgen wordt vanavond nog gekocht, de rest koopt morgen
 
 triggers:
-  - alias: Avond, plan voor morgen
-    trigger: time
-    at: "23:01:00"
-    id: avond
-    note: Laat genoeg om vanavond nog op het plan van vandaag te draaien, vroeg genoeg om de modus vóór middernacht goed te hebben. Op :01 zodat het niet botst met de modustak op het hele uur.
-
-  - alias: Dag, bijstellen op de werkelijke zon
+  - alias: Elk uur het plan bijstellen
     trigger: time_pattern
     hours: /1
     minutes: 5
     id: dag
     note: Op :05 zodat het niet botst met de modustak.
+
+  - alias: Bij zonsondergang meteen de avondronde
+    trigger: sun
+    event: sunset
+    offset: "00:01:00"
+    id: avond
+    note: Anders zit er tot een uur tussen zonsondergang en de eerste avondronde, en in dat gat zou het dagplan nog avondkwartieren kunnen kopen. De minuut zorgt dat sun.sun al op below_horizon staat.
 
   - alias: Modus tegen de actuele prijs houden
     trigger: time_pattern
@@ -59,6 +61,10 @@ variables:
     {{ (states('input_number.zendure_2400_ac_max_oplaadvermogen') | float(2400) / 1000)
        * rendement / 4 }}
 
+  # ---- waar in de dag zitten we ----
+  avond: >-                         # van zonsondergang tot middernacht; dan plannen we de rest van vanavond en morgen samen. Na middernacht is het weer 'dag': dan gaat het om vandaag, ook al is de zon nog onder
+    {{ is_state('sun.sun','below_horizon') and now().hour >= 12 }}
+
   # ---- hoeveel er in de accu past op het moment dat de zon weer schijnt ----
   soc: >-                           # hoe vol de accu nu is, in procenten
     {{ states('sensor.zendure_2400_ac_laadpercentage') | float(soc_minimum) }}
@@ -70,7 +76,7 @@ variables:
   # ---- hoeveel er dan nog uit het net bij moet ----
   zon: >-                           # Solcast-prognose in kWh met de marge erop: 's avonds die voor morgen, anders die voor de rest van vandaag
     {{ (states('sensor.solcast_pv_forecast_forecast_tomorrow') | float(0)
-        if trigger.id == 'avond'
+        if avond
         else states('sensor.solcast_pv_forecast_forecast_remaining_today') | float(0))
        * zon_zekerheid }}
   zonoverschot: >-                  # hoeveel kWh daarvan in de accu terechtkomt
@@ -84,54 +90,53 @@ actions:
   - choose:
 
       # ==================================================================
-      # AVOND: schrijf het plan voor morgen
+      # PLAN: hoeveel kwartieren uit het net, elk uur opnieuw bekeken
       # ==================================================================
-      - alias: Avond, plan voor morgen
+      - alias: Plan voor vandaag, en 's avonds ook voor morgen
         conditions:
           - condition: trigger
-            id: avond
-        sequence:
-          - alias: Schrijf het aantal laadkwartieren voor morgen
-            action: input_number.set_value
-            target:
-              entity_id: input_number.dynamisch_goedkoopste_x_periode_morgen
-            data:
-              value: "{{ nodig }}"
-            note: Ook een 0 wordt geschreven, anders blijft het getal van gisteren staan.
-
-      # ==================================================================
-      # DAG: stel het plan van vandaag elk uur bij
-      # ==================================================================
-      - alias: Dag, bijstellen op de werkelijke zon
-        conditions:
-          - condition: trigger
-            id: dag
-          - alias: Niet na zonsondergang
-            condition: sun
-            before: sunset
-            note: Na zonsondergang is de Solcast-prognose voor de rest van de dag nul, dan zou hij de hele accu uit het net kopen.
+            id:
+              - dag
+              - avond
         sequence:
           - variables:
-              laadkwartieren: >-            # het aantal kwartieren dat we aan het package doorgeven; het package wijst dan de zoveel goedkoopste kwartieren van de dag aan om in te laden
-                {# het package telt daarbij ook kwartieren mee die al voorbij zijn, dus we tellen van goedkoop naar duur door tot er 'nodig' kwartieren tussen zitten die nog komen #}
-                {# kwartieren duurder dan het daggemiddelde doen nooit mee: laden kost dan meer dan het 's avonds oplevert #}
-                {% set prijzen = state_attr('sensor.dynamisch_goedkoopste_periode','raw_today') or [] %}
-                {% set gemiddelde = prijzen | map(attribute='value') | average if prijzen else 0 %}
-                {# twee tellers in een namespace, want een gewone variabele die je in een for-lus ophoogt blijft buiten de lus niet staan #}
-                {% set ns = namespace(x=0, toekomst=0) %}
-                {% for q in prijzen | sort(attribute='value') if ns.toekomst < nodig and q.value < gemiddelde %}
-                  {% set ns.x = ns.x + 1 %}
-                  {% if (q.end | as_datetime) > now() %}{% set ns.toekomst = ns.toekomst + 1 %}{% endif %}
+              laadkwartieren: >-            # het getal voor het package: het aantal goedkoopste kwartieren van de dag, ook voorbije. Dus: de positie in de prijslijst tot en met het duurste kwartier dat we nog willen
+                {% set vandaag = state_attr('sensor.dynamisch_nordpool','raw_today') or [] %}
+                {% set morgen = (state_attr('sensor.dynamisch_nordpool','raw_tomorrow') or []) if avond else [] %}
+                {# het gemiddelde waar een kwartier onder moet liggen: van de dagen waar hij tegen afweegt. Overdag vandaag, 's avonds vandaag en morgen samen #}
+                {% set gemiddelde = (vandaag + morgen) | rejectattr('value','none') | map(attribute='value') | average if vandaag else 0 %}
+                {% set zonsondergang = state_attr('sun.sun','next_setting') | as_datetime %}
+                {# kandidaten van vandaag: nog niet voorbij, onder het gemiddelde (duurder laden kost meer dan het oplevert), en niet na zonsondergang: die weegt de avondronde tegen morgen af. Na zonsondergang is next_setting die van morgen, dan doet dit niets meer #}
+                {% set ns = namespace(kandidaten=[]) %}
+                {% for q in vandaag if (q.end | as_datetime) > now() and q.value < gemiddelde and (q.start | as_datetime) < zonsondergang %}
+                  {% set ns.kandidaten = ns.kandidaten + [q.value] %}
                 {% endfor %}
-                {{ ns.x if nodig > 0 else 0 }}
+                {# 's avonds concurreren ze met heel morgen: van de 'nodig' goedkoopste van beide dagen samen houden we alleen die van vandaag over. Overdag is morgen leeg en zijn het gewoon de 'nodig' goedkoopste kandidaten #}
+                {% set goedkoopste = ((ns.kandidaten + (morgen | rejectattr('value','none') | map(attribute='value') | list)) | sort)[:nodig] %}
+                {% set gekozen = ns.kandidaten | select('in', goedkoopste) | list %}
+                {# de grens is de duurste die we willen; zijn er minder kandidaten dan nodig, dan stopt het daar en worden duurdere kwartieren niet gekocht omdat de goedkope op zijn #}
+                {% set grens = gekozen | max if gekozen else -999 %}
+                {{ vandaag | map(attribute='value') | select('le', grens) | list | count }}
 
-          - alias: Stel het aantal laadkwartieren voor vandaag bij
+          - alias: Schrijf het aantal laadkwartieren voor vandaag
             action: input_number.set_value
             target:
               entity_id: input_number.dynamisch_goedkoopste_x_periode
             data:
               value: "{{ laadkwartieren }}"
-            note: Ook verlagen, anders koop je in wat de zon gratis levert.
+            note: Ook verlagen en ook een 0, anders koop je in wat de zon gratis levert of blijft een oud getal staan.
+
+          - alias: Avond, ook het plan voor morgen
+            if:
+              - condition: template
+                value_template: "{{ avond }}"
+            then:
+              - action: input_number.set_value
+                target:
+                  entity_id: input_number.dynamisch_goedkoopste_x_periode_morgen
+                data:
+                  value: "{{ nodig }}"
+                note: Wat vanavond gekocht wordt gaat er niet af, want wat 's nachts in de accu zit is bij zonsopgang toch verbruikt. Om 00:05 rekent de dagronde het opnieuw uit.
 
       # ==================================================================
       # MODUS: ontladen of inkopen, elk kwartier opnieuw bekeken
@@ -149,7 +154,7 @@ actions:
                 {{ p | count > 0
                    and prijs_nu < p | first / rendement
                    and prijs_nu < p | average }}
-              plan: >-                      # het aantal laadkwartieren dat nu geldt: vanaf 23:01 dat van morgen, daarvoor dat van vandaag
+              plan: >-                      # het aantal laadkwartieren dat nu geldt: vanaf 23:01 dat van morgen, daarvoor dat van vandaag; om middernacht kopieert het package morgen naar vandaag, en dit loopt daar net op vooruit
                 {{ states('input_number.dynamisch_goedkoopste_x_periode_morgen') | float(0)
                    if now() >= today_at('23:01')
                    else states('input_number.dynamisch_goedkoopste_x_periode') | float(0) }}

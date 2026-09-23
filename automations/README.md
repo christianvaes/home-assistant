@@ -53,7 +53,7 @@ quarters of the day. This is how it works out how much that is.
 
 ```mermaid
 flowchart TD
-    F["Solcast forecast<br>rest of today, or tomorrow after 23:01"] -->|15 kWh| M["× zon_zekerheid<br>safety margin on the forecast<br><b>0.9</b>"]
+    F["Solcast forecast<br>rest of today, or tomorrow after sunset"] -->|15 kWh| M["× zon_zekerheid<br>safety margin on the forecast<br><b>0.9</b>"]
     M -->|13.5 kWh| S["× zon_naar_accu_deel<br>the share the house does not use itself<br><b>0.55</b>"]
     S -->|7.4 kWh| B["− zon_basislast<br>what the house uses before anything is left<br><b>1.5 kWh</b>"]
     B -->|5.9 kWh| E["Solar expected to reach the battery"]
@@ -72,9 +72,15 @@ come from. The values on the arrows follow the example at the end of this sectio
 
 The forecast covers the rest of today, not the whole day, so it shrinks as the day goes on.
 The package counts the cheapest quarters of the whole day, including ones already past, so the
-automation counts down the price list until enough of them are still ahead. That is why the
-number it writes keeps growing during the day, even when the battery needs less than it did an
-hour earlier.
+automation looks for the position in the price list where exactly the quarters it wants are
+still ahead. That is why the number it writes keeps growing during the day, even when the
+battery needs less than it did an hour earlier. Quarters above the average never count:
+charging then costs more than it saves. During the day that is the average of today, after
+sunset the average of today and tomorrow together.
+
+After sunset the quarters left today compete with all of tomorrow's. A quarter tonight is only
+bought when it is cheaper than what tomorrow offers. Without this the automation would buy the
+last quarters of the day just because the cheap ones were gone, not because they were cheap.
 
 **A worked example.** A forecast of 15 kWh with the battery at 20 percent. The margin leaves
 13.5 kWh, of which 0.55 × 13.5 − 1.5 = 5.9 kWh is expected to reach the battery. The battery
