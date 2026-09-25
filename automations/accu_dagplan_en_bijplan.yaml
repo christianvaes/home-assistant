@@ -1,8 +1,14 @@
 alias: Accu dagplan en bijplan
 description: |-
-  Bepaalt hoeveel kwartieren de accu uit het net bijlaadt en in welke modus hij staat.
+  Vult de accu zo veel mogelijk met eigen zonnestroom, en koopt alleen uit het net bij wat de zon niet gaat brengen, op de goedkoopste momenten.
 
-  BESLISREGEL, IN VOLGORDE:
+  HOE, elk uur en bij zonsondergang:
+  - Hij kijkt hoeveel er nog in de accu past en hoeveel zonnestroom Solcast nog verwacht. Het verschil moet uit het net komen.
+  - Dat koopt hij in de goedkoopste kwartieren van vandaag, zolang die onder het daggemiddelde liggen. Duurder laden kost meer dan het oplevert.
+  - 's Nachts rekent hij alsof de accu bij zonsopgang leeg is, zodat hij geen goedkoop nachtkwartier mist. Te veel kan niet, de accu stopt op 100 procent.
+  - 's Avonds vergelijkt hij de kwartieren die vandaag nog komen met die van morgen, en koopt vanavond alleen wat goedkoper is dan morgen.
+
+  BESLISREGEL VOOR DE MODUS, elk kwartier, in volgorde:
   1. Wordt er nu bijgeladen op net | Dynamisch NOM | alleen daar werkt het laadblok
   2. Goedkoopste kwartier en accu komt niet vol uit zon | Alleen slim opladen
   3. Moet er vandaag niets meer bijgeladen worden | Nul op de meter
@@ -19,8 +25,6 @@ description: |-
   - accu vol uit zon | de zon levert vandaag genoeg om de accu helemaal te vullen | er hoeft niets uit het net bij
   - bijladen op net | dit kwartier is door het package aangewezen om de accu uit het net te laden
   - goedkoopste kwartier | de prijs ligt onder de laagste van vandaag gedeeld door je rendement | en onder het daggemiddelde | op een vlakke dag bestaat er dus geen dal
-  - nacht | zolang de zon onder is | dan plannen we alsof de accu bij zonsopgang leeg is, zodat goedkope nachtkwartieren nooit gemist worden; te veel kan niet, het package stopt op 100 procent | overdag rekenen we met wat er echt in zit
-  - avond | van zonsondergang tot middernacht | de kwartieren die vandaag nog komen concurreren met heel morgen; alleen wat goedkoper is dan morgen wordt vanavond nog gekocht, de rest koopt morgen
 
 triggers:
   - alias: Elk uur het plan bijstellen
@@ -35,7 +39,7 @@ triggers:
     event: sunset
     offset: "00:01:00"
     id: avond
-    note: Anders zit er tot een uur tussen zonsondergang en de eerste avondronde, en in dat gat zou het dagplan nog avondkwartieren kunnen kopen. De minuut zorgt dat sun.sun al op below_horizon staat.
+    note: Anders zit er tot een uur tussen zonsondergang en de eerste avondronde, en in dat gat zou het dagplan nog avondkwartieren kunnen kopen. De minuut is marge zodat next_setting zeker al naar morgen wijst.
 
   - alias: Modus tegen de actuele prijs houden
     trigger: time_pattern
@@ -62,15 +66,17 @@ variables:
        * rendement / 4 }}
 
   # ---- waar in de dag zitten we ----
+  zon_onder: >-                     # de eerstvolgende zonsopgang komt eerder dan de eerstvolgende zonsondergang. Niet de status van sun.sun: die volgt de zonshoogte en loopt tot vier minuten achter op het moment van zonsondergang, terwijl de trigger en next_setting daar precies op zitten
+    {{ (state_attr('sun.sun','next_rising') | as_datetime) < (state_attr('sun.sun','next_setting') | as_datetime) }}
   avond: >-                         # van zonsondergang tot middernacht; dan plannen we de rest van vanavond en morgen samen. Na middernacht is het weer 'dag': dan gaat het om vandaag, ook al is de zon nog onder
-    {{ is_state('sun.sun','below_horizon') and now().hour >= 12 }}
+    {{ zon_onder and now().hour >= 12 }}
 
   # ---- hoeveel er in de accu past op het moment dat de zon weer schijnt ----
   soc: >-                           # hoe vol de accu nu is, in procenten
     {{ states('sensor.zendure_2400_ac_laadpercentage') | float(soc_minimum) }}
-  ruimte_in_accu: >-                # hoeveel kWh er nog in de accu bij kan. Overdag: de echte ruimte van nu. 's Nachts: de hele accu, alsof hij bij zonsopgang leeg is; zo mist hij nooit goedkope nachtkwartieren, en te veel kan niet want het package stopt op 100 procent
+  ruimte_in_accu: >-                # hoeveel kWh er nog in de accu bij kan. Overdag: de echte ruimte van nu. 's Nachts: de hele accu, alsof hij bij zonsopgang leeg is; zo mist hij nooit goedkope nachtkwartieren, en te veel kan niet want de accu stopt op 100 procent
     {{ accu_inhoud * (soc_maximum - soc_minimum) / 100
-       if is_state('sun.sun','below_horizon')
+       if zon_onder
        else [ accu_inhoud * (soc_maximum - soc) / 100, 0 ] | max }}
 
   # ---- hoeveel er dan nog uit het net bij moet ----
