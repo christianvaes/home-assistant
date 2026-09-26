@@ -52,7 +52,7 @@ variables:
   rendement: 0.87                   # round trip, iets onder de bij mij gemeten 87,6 procent; het package heeft er een sensor voor
   zon_naar_accu_deel: 0.55          # deel van de zonnestroom dat het huis overdag niet zelf gebruikt en naar de accu gaat; bij mij 55 procent, teruglevering gedeeld door opwek
   zon_basislast: 1.5                # kWh zonnestroom per dag die het huis eerst zelf opmaakt, pas daarna gaat er iets naar de accu; bij mij 1,5
-  zon_zekerheid: 0.9                # veiligheidsmarge: reken met 90 procent van de Solcast-prognose, want die valt vaker tegen dan mee; lager is meer marge en koopt vaker zon in die je gratis had gehad
+  zon_zekerheid: 0.8                # veiligheidsmarge: reken met 80 procent van de Solcast-prognose, want die valt vaker tegen dan mee; lager is meer marge en koopt vaker zon in die je gratis had gehad
 
   # ---- waarden uit het Zendure zenSDK-package van Gielz1986, met mijn waarden als terugval als een sensor wegvalt ----
   accu_inhoud: >-                   # totale inhoud van de accu in kWh
