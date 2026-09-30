@@ -39,12 +39,18 @@ forecast fills the battery without the grid.
 | no | cheapest quarter | will not fill from solar | the house buys, and the battery is saved for a more expensive hour | `Alleen slim opladen` |
 | no | cheapest quarter, grid charging active | any | the battery charges from the grid, the house buys its own power | `Dynamisch NOM` |
 | no | expensive | any | the battery supplies the house | `Nul op de meter` or `Dynamisch NOM` |
+| excluded appliance running | any | any | the house buys from the grid, the battery does not discharge at all | `Alleen slim opladen` |
 
 The mode names are Dutch, they come from the Gielz zenSDK package. A quarter
 counts as cheap when the price is within the round trip loss of the lowest price
 of the day, and below the day average. Moving a kWh through the battery costs
 about 13 percent, so a smaller spread than that costs money instead of saving
 it. On a flat day nothing qualifies.
+
+The excluded appliances are optional: a list of power sensors, for example a car
+charger, with one threshold above which an appliance counts as running. Leave
+the list empty and the row above never applies. Grid charging in the planned
+cheap quarters keeps working while an appliance runs, only discharging stops.
 
 ### Topping up from the grid
 
@@ -93,7 +99,7 @@ Not every automation needs everything.
 
 | automation | needs |
 |---|---|
-| [`accu_dagplan_en_bijplan.yaml`](accu_dagplan_en_bijplan.yaml) | zenSDK package, Solcast, Nordpool |
+| [`accu_dagplan_en_bijplan.yaml`](accu_dagplan_en_bijplan.yaml) | zenSDK package, Solcast, Nordpool, and optionally power sensors on appliances during which the battery must not discharge |
 | [`vaatwasser_starten_op_de_goedkoopste_prijs.yaml`](vaatwasser_starten_op_de_goedkoopste_prijs.yaml) | Home Connect, Nordpool |
 | [`boiler_verhogen_zonoverschot.yaml`](boiler_verhogen_zonoverschot.yaml) | Tech Controllers, zenSDK package, the P1 meter, and a power meter on the heat pump circuit |
 | [`warmtepomp_koeling_uit_bij_hoge_stroomprijs.yaml`](warmtepomp_koeling_uit_bij_hoge_stroomprijs.yaml) | Tech Controllers, Nordpool, and a sensor with today's forecast high, from any weather integration |

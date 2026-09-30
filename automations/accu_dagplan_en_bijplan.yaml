@@ -1,6 +1,6 @@
 alias: Accu dagplan en bijplan
 description: |-
-  Vult de accu zo veel mogelijk met eigen zonnestroom, en koopt alleen uit het net bij wat de zon niet gaat brengen, op de goedkoopste momenten.
+  Vult de accu zo veel mogelijk met eigen zonnestroom, en koopt alleen uit het net bij wat de zon niet gaat brengen, op de goedkoopste momenten. Staat een van de uitgesloten apparaten aan, zoals een autolader, dan ontlaadt de accu helemaal niet, ook niet voor het huis.
 
   HOE, elk uur en bij zonsondergang:
   - Hij kijkt hoeveel er nog in de accu past en hoeveel zonnestroom Solcast nog verwacht. Het verschil moet uit het net komen.
@@ -10,11 +10,13 @@ description: |-
 
   BESLISREGEL VOOR DE MODUS, elk kwartier, in volgorde:
   1. Wordt er nu bijgeladen op net | Dynamisch NOM | alleen daar werkt het laadblok
-  2. Goedkoopste kwartier en accu komt niet vol uit zon | Alleen slim opladen
-  3. Moet er vandaag niets meer bijgeladen worden | Nul op de meter
-  4. Anders | Dynamisch NOM
+  2. Uitgesloten apparaat aan | Alleen slim opladen | de accu ontlaadt niet, laden gaat door op zon en in de laadkwartieren van regel 1
+  3. Goedkoopste kwartier en accu komt niet vol uit zon | Alleen slim opladen
+  4. Moet er vandaag niets meer bijgeladen worden | Nul op de meter
+  5. Anders | Dynamisch NOM
 
   WAT DAT PER SITUATIE BETEKENT:
+  - Uitgesloten apparaat aan | huis en apparaat kopen uit het net, de accu ontlaadt helemaal niet en laadt wel op zonoverschot en in de goedkope kwartieren | Alleen slim opladen
   - Zon over | accu komt vol uit zon | de zon vult de accu en dekt je huis | Nul op de meter
   - Zon over | goedkoopste kwartier | accu komt niet vol | de zon vult de accu en je huis koopt het tekort in | Alleen slim opladen
   - Geen zon | goedkoopste kwartier | accu komt niet vol | je huis koopt in en de accu blijft gespaard voor een duurder moment | Alleen slim opladen
@@ -25,6 +27,12 @@ description: |-
   - accu vol uit zon | de zon levert vandaag genoeg om de accu helemaal te vullen | er hoeft niets uit het net bij
   - bijladen op net | dit kwartier is door het package aangewezen om de accu uit het net te laden
   - goedkoopste kwartier | de prijs ligt onder de laagste van vandaag gedeeld door je rendement | en onder het daggemiddelde | op een vlakke dag bestaat er dus geen dal
+  - uitgesloten apparaat | zolang het aan staat ontlaadt de accu niet, ook niet voor het huis | aan zodra zijn vermogenssensor boven de drempel staat | geen sensoren ingevuld is uit
+
+trigger_variables:
+  # ---- optioneel: apparaten waarbij de accu helemaal niet mag ontladen zolang ze aan staan, zoals een autolader ----
+  uitgesloten_apparaten: []                    # vermogenssensoren van die apparaten, bijvoorbeeld ["sensor.autolader_vermogen"]; leeg is uit
+  uitgesloten_apparaten_vanaf_vermogen: 0      # vanaf dit vermogen telt een apparaat als aan, in de eenheid van de sensor; 0 voor een autolader, hoger voor een apparaat dat in rust ook wat trekt
 
 triggers:
   - alias: Elk uur het plan bijstellen
@@ -46,6 +54,21 @@ triggers:
     minutes: /15
     id: modus
     note: Zo vaak verandert de prijs.
+
+  - alias: Modus direct omzetten als een uitgesloten apparaat aangaat
+    trigger: template
+    value_template: >-
+      {{ expand(uitgesloten_apparaten) | map(attribute='state') | map('float', 0)
+         | select('gt', uitgesloten_apparaten_vanaf_vermogen) | list | count > 0 }}
+    id: modus
+    note: Zonder deze trigger duurt het tot het volgende kwartier voordat de accu wordt gespaard.
+
+  - alias: Modus direct terugzetten als het laatste uitgesloten apparaat uitgaat
+    trigger: template
+    value_template: >-
+      {{ expand(uitgesloten_apparaten) | map(attribute='state') | map('float', 0)
+         | select('gt', uitgesloten_apparaten_vanaf_vermogen) | list | count == 0 }}
+    id: modus
 
 variables:
   # ---- aan te passen aan jouw situatie ----
@@ -70,6 +93,9 @@ variables:
     {{ (state_attr('sun.sun','next_rising') | as_datetime) < (state_attr('sun.sun','next_setting') | as_datetime) }}
   avond: >-                         # van zonsondergang tot middernacht; dan plannen we de rest van vanavond en morgen samen. Na middernacht is het weer 'dag': dan gaat het om vandaag, ook al is de zon nog onder
     {{ zon_onder and now().hour >= 12 }}
+  uitgesloten_apparaat_aan: >-      # staat er nu een uitgesloten apparaat aan; een lege lijst of een weggevallen sensor telt als uit
+    {{ expand(uitgesloten_apparaten) | map(attribute='state') | map('float', 0)
+       | select('gt', uitgesloten_apparaten_vanaf_vermogen) | list | count > 0 }}
 
   # ---- hoeveel er in de accu past op het moment dat de zon weer schijnt ----
   soc: >-                           # hoe vol de accu nu is, in procenten
@@ -164,9 +190,9 @@ actions:
                 {{ states('input_number.dynamisch_goedkoopste_x_periode_morgen') | float(0)
                    if now() >= today_at('23:01')
                    else states('input_number.dynamisch_goedkoopste_x_periode') | float(0) }}
-              gewenst: >-                   # de modus volgens de vier regels uit de beschrijving
+              gewenst: >-                   # de modus volgens de vijf regels uit de beschrijving
                 {{ 'Dynamisch NOM' if is_state('sensor.dynamisch_goedkoopste_periode','Ja')
-                   else 'Alleen slim opladen' if (in_dal and plan > 0)
+                   else 'Alleen slim opladen' if uitgesloten_apparaat_aan or (in_dal and plan > 0)
                    else 'Nul op de meter' if plan == 0
                    else 'Dynamisch NOM' }}
 
