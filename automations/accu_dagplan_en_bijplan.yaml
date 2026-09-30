@@ -52,8 +52,9 @@ triggers:
   - alias: Modus tegen de actuele prijs houden
     trigger: time_pattern
     minutes: /15
+    seconds: 5
     id: modus
-    note: Zo vaak verandert de prijs.
+    note: Zo vaak verandert de prijs. Vijf seconden na het kwartier, zodat de prijs, het laadblok en om middernacht het plan van de nieuwe dag al zijn bijgewerkt.
 
   - alias: Modus direct omzetten als een uitgesloten apparaat aangaat
     trigger: template
