@@ -8,7 +8,7 @@ left over. Each one is a separate YAML file.
 | file | what it does |
 |---|---|
 | [`accu_dagplan_en_bijplan.yaml`](accu_dagplan_en_bijplan.yaml) | Fills the Zendure battery with solar and buys the rest in the cheapest quarter-hours, planned on the solar forecast. Sets the battery mode |
-| [`vaatwasser_starten_op_de_goedkoopste_prijs.yaml`](vaatwasser_starten_op_de_goedkoopste_prijs.yaml) | Starts the selected program on the Siemens dishwasher, delayed until the cheapest window |
+| [`vaatwasser_starten_op_de_goedkoopste_prijs.yaml`](vaatwasser_starten_op_de_goedkoopste_prijs.yaml) | Starts auto 2 on the Siemens dishwasher, delayed until the cheapest window, or earlier when solar is being exported |
 | [`boiler_verhogen_zonoverschot.yaml`](boiler_verhogen_zonoverschot.yaml) | Raises the hot water setpoint on the Ecoforest heat pump when there is really solar left over |
 | [`warmtepomp_koeling_uit_bij_hoge_stroomprijs.yaml`](warmtepomp_koeling_uit_bij_hoge_stroomprijs.yaml) | Turns the Ecoforest heat pump off above EUR 0.50 per kWh when warm weather is forecast |
 
@@ -100,7 +100,7 @@ Not every automation needs everything.
 | automation | needs |
 |---|---|
 | [`accu_dagplan_en_bijplan.yaml`](accu_dagplan_en_bijplan.yaml) | zenSDK package, Solcast, Nordpool, and optionally power sensors on appliances during which the battery must not discharge |
-| [`vaatwasser_starten_op_de_goedkoopste_prijs.yaml`](vaatwasser_starten_op_de_goedkoopste_prijs.yaml) | Home Connect, Nordpool |
+| [`vaatwasser_starten_op_de_goedkoopste_prijs.yaml`](vaatwasser_starten_op_de_goedkoopste_prijs.yaml) | Home Connect, Nordpool, and the P1 meter |
 | [`boiler_verhogen_zonoverschot.yaml`](boiler_verhogen_zonoverschot.yaml) | Tech Controllers, zenSDK package, the P1 meter, and a power meter on the heat pump circuit |
 | [`warmtepomp_koeling_uit_bij_hoge_stroomprijs.yaml`](warmtepomp_koeling_uit_bij_hoge_stroomprijs.yaml) | Tech Controllers, Nordpool, and a sensor with today's forecast high, from any weather integration |
 
@@ -109,7 +109,7 @@ Not every automation needs everything.
 | [Zendure zenSDK package](https://github.com/Gielz1986/Zendure-HA-zenSDK) | the battery entities, the mode selector and the dynamic price sensors |
 | [Solcast](https://github.com/BJReplay/ha-solcast-solar) | the solar forecast for today and tomorrow |
 | [Nordpool](https://github.com/custom-components/nordpool/) | the quarter-hour prices, tax and surcharges included. Take the HACS one, not the Nord Pool integration that ships with Home Assistant |
-| [Home Connect](https://www.home-assistant.io/integrations/home_connect) | the dishwasher door, program and remote start |
+| [Home Connect](https://www.home-assistant.io/integrations/home_connect) | the dishwasher door, program, remote start and the delayed start time |
 | [Tech Controllers](https://github.com/mariusz-ostoja-swierczynski/tech-controllers) | the heat pump: the hot water setpoint and the on/off switch |
 | [Eplucon](https://github.com/koenhendriks/ha-eplucon) | readings from the same heat pump, used here only for the water temperature in a notification |
 
@@ -129,3 +129,10 @@ installation.
 
 [`boiler_verhogen_zonoverschot.yaml`](boiler_verhogen_zonoverschot.yaml) uses a threshold of 2400 W, based on the
 measured 2177 W draw during water heating.
+
+[`vaatwasser_starten_op_de_goedkoopste_prijs.yaml`](vaatwasser_starten_op_de_goedkoopste_prijs.yaml) uses these:
+
+| variable | value | source |
+|---|---|---|
+| `vanaf_teruglevering` | 1500 W | the first heating phase of auto 2 draws 1.42 to 1.51 kW |
+| `kwartieren` | 10 | auto 2 takes 2:00 to 2:17 |

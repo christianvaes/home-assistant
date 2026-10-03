@@ -1,5 +1,5 @@
 alias: Boiler verhogen zonoverschot
-description: Verhoogt de warmwater-setpoint van de 58 van EPEX naar 65 als je meer terugleverte dan de boiler zelf trekt. Teruglevering is per definitie wat de accu niet kwijt kan, dus dan is het echt over.
+description: Verhoogt de warmwater-setpoint van de 58 van EPEX naar 65 als je meer terugleverde dan de boiler zelf trekt. Teruglevering is per definitie wat de accu niet kwijt kan, dus dan is het echt over.
 triggers:
   - alias: Teruglevering boven wat de boiler trekt
     trigger: template
@@ -8,9 +8,9 @@ triggers:
       {% set warmtepomp = states('sensor.warmtepomp_groep_electric_consumption_w') | float(0) %}
       {{ warmtepomp - p1 > 2400 }}
     for:
-      minutes: 10
+      minutes: 15
     id: aan
-    note: P1 is negatief bij teruglevering, dus min p1 is je overschot. Het warmtepompvermogen erbij, zodat het getal niet verspringt als de boiler zelf aan gaat. De boiler trekt gemeten 2177 W. Tien minuten, zodat een opklaring hem niet start.
+    note: P1 is negatief bij teruglevering, dus min p1 is je overschot. Het warmtepompvermogen erbij, zodat het getal niet verspringt als de boiler zelf aan gaat. De boiler trekt gemeten 2177 W. Vijftien minuten, zodat een opklaring hem niet start.
   - alias: Teruglevering te klein of de accu moet bijspringen
     trigger: template
     value_template: |-
