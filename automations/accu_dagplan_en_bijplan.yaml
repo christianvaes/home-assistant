@@ -1,5 +1,7 @@
 alias: Accu dagplan en bijplan
 description: |-
+  Versie 20261009
+
   Vult de accu zo veel mogelijk met eigen zonnestroom, en koopt alleen uit het net bij wat de zon niet gaat brengen, op de goedkoopste momenten. Staat een van de uitgesloten apparaten aan, zoals een autolader, dan ontlaadt de accu helemaal niet, ook niet voor het huis.
 
   HOE, elk uur en bij zonsondergang:
@@ -9,24 +11,24 @@ description: |-
   - 's Avonds vergelijkt hij de kwartieren die vandaag nog komen met die van morgen, en koopt vanavond alleen wat goedkoper is dan morgen.
 
   BESLISREGEL VOOR DE MODUS, elk kwartier, in volgorde:
-  1. Wordt er nu bijgeladen op net | Dynamisch NOM | alleen daar werkt het laadblok
+  1. Wordt er nu bijgeladen op net | Dynamisch NOM | alleen in die stand laadt hij uit het net
   2. Uitgesloten apparaat aan | Alleen slim opladen | de accu ontlaadt niet, laden gaat door op zon en in de laadkwartieren van regel 1
-  3. Goedkoopste kwartier en accu komt niet vol uit zon | Alleen slim opladen
+  3. Accu haalt de volgende keer bijladen niet, en dit is niet een van de duurste kwartieren tot dan | Alleen slim opladen
   4. Moet er vandaag niets meer bijgeladen worden | Nul op de meter
   5. Anders | Dynamisch NOM
 
-  WAT DAT PER SITUATIE BETEKENT:
-  - Uitgesloten apparaat aan | huis en apparaat kopen uit het net, de accu ontlaadt helemaal niet en laadt wel op zonoverschot en in de goedkope kwartieren | Alleen slim opladen
-  - Zon over | accu komt vol uit zon | de zon vult de accu en dekt je huis | Nul op de meter
-  - Zon over | goedkoopste kwartier | accu komt niet vol | de zon vult de accu en je huis koopt het tekort in | Alleen slim opladen
-  - Geen zon | goedkoopste kwartier | accu komt niet vol | je huis koopt in en de accu blijft gespaard voor een duurder moment | Alleen slim opladen
-  - Geen zon | goedkoopste kwartier | dit kwartier laadt bij op net | de accu laadt uit het net en je huis koopt zelf in | Dynamisch NOM
-  - Geen zon | dure prijs | de accu levert aan je huis | Nul op de meter of Dynamisch NOM
+  WAT DAT PER SITUATIE BETEKENT, zon over | prijs | accu | wat er gebeurt | modus:
+  1. maakt niet uit | laadkwartier van het plan | maakt niet uit | de accu laadt uit het net en je huis koopt zelf in | Dynamisch NOM
+  2. uitgesloten apparaat aan | maakt niet uit | maakt niet uit | huis en apparaat kopen uit het net, de accu ontlaadt helemaal niet en laadt wel op zonoverschot en in de laadkwartieren | Alleen slim opladen
+  3. nee | niet een van de duurste kwartieren die hij nog kan dekken | te krap tot de volgende keer bijladen | je huis koopt in en de accu wacht op de duurdere kwartieren die nog komen | Alleen slim opladen
+  4. maakt niet uit | maakt niet uit | plan 0, komt vol uit zon | de zon vult de accu en de accu dekt je huis | Nul op de meter
+  5. maakt niet uit | maakt niet uit | genoeg tot de volgende keer bijladen, of een van de duurste kwartieren | de accu levert aan je huis, ook 's nachts als het goedkoop is | Dynamisch NOM
+  Buiten de laadkwartieren doen Nul op de meter en Dynamisch NOM hetzelfde; het verschil laat alleen zien of er vandaag nog gekocht wordt.
 
   BEGRIPPEN:
   - accu vol uit zon | de zon levert vandaag genoeg om de accu helemaal te vullen | er hoeft niets uit het net bij
   - bijladen op net | dit kwartier is door het package aangewezen om de accu uit het net te laden
-  - goedkoopste kwartier | de prijs ligt onder de laagste van vandaag gedeeld door je rendement | en onder het daggemiddelde | op een vlakke dag bestaat er dus geen dal
+  - accu te krap | wat er nu in de accu zit is minder dan het huis nodig heeft tot de volgende keer bijladen | gerekend met het huisverbruik hieronder | bijladen telt pas als het minstens een uur achter elkaar is, een los laadkwartier niet | de kwartieren die hij wel kan dekken zijn de duurste tot dan
   - uitgesloten apparaat | zolang het aan staat ontlaadt de accu niet, ook niet voor het huis | aan zodra zijn vermogenssensor boven de drempel staat | geen sensoren ingevuld is uit
 
 trigger_variables:
@@ -54,7 +56,7 @@ triggers:
     minutes: /15
     seconds: 5
     id: modus
-    note: Zo vaak verandert de prijs. Vijf seconden na het kwartier, zodat de prijs, het laadblok en om middernacht het plan van de nieuwe dag al zijn bijgewerkt.
+    note: Zo vaak verandert de prijs. Vijf seconden na het kwartier, zodat de prijs, de laadkwartieren en om middernacht het plan van de nieuwe dag al zijn bijgewerkt.
 
   - alias: Modus direct omzetten als een uitgesloten apparaat aangaat
     trigger: template
@@ -77,6 +79,7 @@ variables:
   zon_naar_accu_deel: 0.55          # deel van de zonnestroom dat het huis overdag niet zelf gebruikt en naar de accu gaat; bij mij 55 procent, teruglevering gedeeld door opwek
   zon_basislast: 1.5                # kWh zonnestroom per dag die het huis eerst zelf opmaakt, pas daarna gaat er iets naar de accu; bij mij 1,5
   zon_zekerheid: 0.8                # veiligheidsmarge: reken met 80 procent van de Solcast-prognose, want die valt vaker tegen dan mee; lager is meer marge en koopt vaker zon in die je gratis had gehad
+  huisverbruik: 0.55                # kW die het huis gemiddeld trekt als de zon niets levert; bij mij 0,55, wat de accu 's nachts per uur levert; in de winter hoger door de warmtepomp
 
   # ---- waarden uit het Zendure zenSDK-package van Gielz1986, met mijn waarden als terugval als een sensor wegvalt ----
   accu_inhoud: >-                   # totale inhoud van de accu in kWh
@@ -180,20 +183,28 @@ actions:
             id: modus
         sequence:
           - variables:
-              in_dal: >-                    # is dit nu een goedkoopste kwartier zoals in de beschrijving; een kapotte sensor geeft 999 en telt dus nooit als goedkoop
-                {% set p = (state_attr('sensor.dynamisch_nordpool','raw_today') or [])
-                           | map(attribute='value') | list | sort %}
-                {% set prijs_nu = states('sensor.dynamisch_nordpool') | float(999) %}
-                {{ p | count > 0
-                   and prijs_nu < p | first / rendement
-                   and prijs_nu < p | average }}
+              kwartieren_in_accu: >-        # hoeveel kwartieren het huis vooruit kan met wat er nu boven de bodem in de accu zit, gerekend met huisverbruik
+                {{ ([ accu_inhoud * (soc - soc_minimum) / 100, 0 ] | max / (huisverbruik / 4)) | int }}
+              spaar: >-                     # haalt de accu de volgende keer bijladen niet, en is dit kwartier niet een van de duurste tot dan
+                {% set vandaag = state_attr('sensor.dynamisch_goedkoopste_periode','raw_today') or [] %}
+                {% set morgen = state_attr('sensor.dynamisch_goedkoopste_periode','raw_tomorrow') or [] %}
+                {# het venster: de prijzen van de kwartieren van nu tot het eerstvolgende bijladen. Het package zet goedkoop 'ja' op elk laadkwartier van het plan; bijladen telt pas bij vier achter elkaar, een uur. Losse laadkwartieren tellen niet mee en komen ook niet in het venster, daarin laadt de accu #}
+                {% set ns = namespace(venster=[], blok=0) %}
+                {% for q in vandaag + morgen if (q.end | as_datetime) > now() and ns.blok < 4 %}
+                  {% if q.goedkoop == 'ja' %}{% set ns.blok = ns.blok + 1 %}
+                  {% else %}{% set ns.blok = 0 %}{% set ns.venster = ns.venster + [q.value] %}{% endif %}
+                {% endfor %}
+                {# de grens: sorteer het venster van duur naar goedkoop en pak de prijs op positie kwartieren_in_accu, dat is het goedkoopste kwartier dat de accu nog kan dekken. Ligt de prijs van nu daaronder, dan hoort dit kwartier niet bij de duurste en spaart hij #}
+                {# een weggevallen laadpercentage geeft 0 kwartieren en een weggevallen prijs 999: dan spaart hij nooit #}
+                {{ kwartieren_in_accu < ns.venster | count
+                   and states('sensor.dynamisch_nordpool') | float(999) < (ns.venster | sort(reverse=true))[kwartieren_in_accu - 1] }}
               plan: >-                      # het aantal laadkwartieren dat nu geldt: vanaf 23:01 dat van morgen, daarvoor dat van vandaag; om middernacht kopieert het package morgen naar vandaag, en dit loopt daar net op vooruit
                 {{ states('input_number.dynamisch_goedkoopste_x_periode_morgen') | float(0)
                    if now() >= today_at('23:01')
                    else states('input_number.dynamisch_goedkoopste_x_periode') | float(0) }}
               gewenst: >-                   # de modus volgens de vijf regels uit de beschrijving
                 {{ 'Dynamisch NOM' if is_state('sensor.dynamisch_goedkoopste_periode','Ja')
-                   else 'Alleen slim opladen' if uitgesloten_apparaat_aan or (in_dal and plan > 0)
+                   else 'Alleen slim opladen' if uitgesloten_apparaat_aan or (spaar and plan > 0)
                    else 'Nul op de meter' if plan == 0
                    else 'Dynamisch NOM' }}
 

@@ -32,20 +32,25 @@ the battery runs in, and how much it tops up from the grid.
 Every quarter-hour it picks a mode, based on the solar left over, the price, and whether the
 forecast fills the battery without the grid.
 
-| solar left over | price | battery | what happens | mode |
-|---|---|---|---|---|
-| yes | any | fills from solar alone | solar fills the battery and covers the house | `Nul op de meter` |
-| yes | cheapest quarter | will not fill from solar | solar fills the battery, the house buys the shortfall | `Alleen slim opladen` |
-| no | cheapest quarter | will not fill from solar | the house buys, and the battery is saved for a more expensive hour | `Alleen slim opladen` |
-| no | cheapest quarter, grid charging active | any | the battery charges from the grid, the house buys its own power | `Dynamisch NOM` |
-| no | expensive | any | the battery supplies the house | `Nul op de meter` or `Dynamisch NOM` |
-| excluded appliance running | any | any | the house buys from the grid, the battery does not discharge at all | `Alleen slim opladen` |
+| rule | solar left over | price | battery | what happens | mode |
+|---|---|---|---|---|---|
+| 1 | any | planned charging quarter | any | the battery charges from the grid, the house buys its own power | `Dynamisch NOM` |
+| 2 | excluded appliance running | any | any | the house buys from the grid, the battery does not discharge at all | `Alleen slim opladen` |
+| 3 | no | not among the most expensive quarters it can still cover | too little until the next charging block | the house buys, and the battery waits for the more expensive quarters ahead | `Alleen slim opladen` |
+| 4 | any | any | nothing to buy today, the sun fills it | the battery supplies the house, solar surplus goes in | `Nul op de meter` |
+| 5 | any | any | enough until the next charging block, or one of the most expensive quarters | the battery supplies the house, also at night when power is cheap | `Dynamisch NOM` |
 
-The mode names are Dutch, they come from the Gielz zenSDK package. A quarter
-counts as cheap when the price is within the round trip loss of the lowest price
-of the day, and below the day average. Moving a kWh through the battery costs
-about 13 percent, so a smaller spread than that costs money instead of saving
-it. On a flat day nothing qualifies.
+The mode names are Dutch, they come from the Gielz zenSDK package. Outside the
+charging quarters `Nul op de meter` and `Dynamisch NOM` behave the same; the
+difference only shows whether there is still something to buy today.
+
+Rule 3, every quarter: the automation works out how many quarters the house can
+still run on what is in the battery, using an average house load, and looks at
+the prices from now until the next charging block, today and tomorrow together.
+A charging block is at least an hour of planned charging quarters in a row; a
+single planned quarter adds only 4 percent and does not count. If the battery
+cannot cover all quarters until then, it is kept for the most expensive ones and
+the house buys the rest from the grid. If it can, it just discharges.
 
 The excluded appliances are optional: a list of power sensors, for example a car
 charger, with one threshold above which an appliance counts as running. Leave
@@ -126,6 +131,7 @@ installation.
 | `zon_basislast` | 1.5 kWh | same |
 | `rendement` | 0.87 | round trip, just below the measured 87.6 percent |
 | `zon_zekerheid` | 0.8 | Solcast ran 20 percent high on most days in September 2026; a bigger margin would buy solar you would have had for free |
+| `huisverbruik` | 0.55 kW | what the battery delivers per hour at night, measured on 15 September and 8 October 2026; higher in winter because of the heat pump |
 
 [`boiler_verhogen_zonoverschot.yaml`](boiler_verhogen_zonoverschot.yaml) uses a threshold of 2400 W, based on the
 measured 2177 W draw during water heating.

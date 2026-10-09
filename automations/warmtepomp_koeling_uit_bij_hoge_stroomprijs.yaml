@@ -1,5 +1,7 @@
 alias: Warmtepomp koeling uit bij hoge stroomprijs
 description: |-
+  Versie 20260914
+
   Zet de warmtepomp uit zodra de stroomprijs boven 0,50 komt op een warme dag, en weer aan
   als de laatste vier kwartierprijzen onder 0,50 liggen. Zo staat hij altijd minstens een
   uur uit en schakelt hij niet heen en weer.

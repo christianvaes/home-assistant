@@ -1,5 +1,8 @@
 alias: Boiler verhogen zonoverschot
-description: Verhoogt de warmwater-setpoint van de 58 van EPEX naar 65 als je meer terugleverde dan de boiler zelf trekt. Teruglevering is per definitie wat de accu niet kwijt kan, dus dan is het echt over.
+description: |-
+  Versie 20261003
+
+  Verhoogt de warmwater-setpoint van de 58 van EPEX naar 65 als je meer terugleverde dan de boiler zelf trekt. Teruglevering is per definitie wat de accu niet kwijt kan, dus dan is het echt over.
 triggers:
   - alias: Teruglevering boven wat de boiler trekt
     trigger: template
