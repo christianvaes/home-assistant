@@ -1,0 +1,9 @@
+# A minimal Home Assistant configuration that loads every automation in this repository,
+# only for the configuration check in CI.
+homeassistant:
+  name: CI
+  unit_system: metric
+  time_zone: Europe/Amsterdam
+  country: NL
+
+automation: !include_dir_list ../automations

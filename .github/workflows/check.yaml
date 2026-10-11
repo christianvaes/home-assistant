@@ -1,0 +1,44 @@
+name: Check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  # every Monday, so a new Home Assistant release that breaks an automation shows up before updating
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+jobs:
+  yamllint:
+    name: YAML
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: pip install yamllint
+      - run: yamllint .
+
+  home-assistant:
+    name: Home Assistant ${{ matrix.version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        version: [stable, beta]
+    # a failing beta is an early warning, not a broken repository
+    continue-on-error: ${{ matrix.version == 'beta' }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check the configuration
+        # Home Assistant disables an invalid automation and logs an error, but the check itself
+        # still succeeds. So the log decides: an error fails the job, a warning is shown.
+        run: |
+          set -o pipefail
+          docker run --rm --entrypoint python3 -v "$PWD:/repo:ro" -w /repo \
+            ghcr.io/home-assistant/home-assistant:${{ matrix.version }} \
+            -m homeassistant --script check_config -c ci 2>&1 | tee check.log
+          grep -E '^WARNING' check.log | sed 's/^/::warning::/' || true
+          if grep -qE '^(ERROR|CRITICAL)|Failed config|Invalid config' check.log; then
+            grep -E '^(ERROR|CRITICAL)|Failed config|Invalid config' check.log | sed 's/^/::error::/'
+            exit 1
+          fi
