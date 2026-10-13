@@ -1,6 +1,6 @@
 alias: Accu dagplan en bijplan
 description: |-
-  Versie 20261009
+  Versie 20261013
 
   Vult de accu zo veel mogelijk met eigen zonnestroom, en koopt alleen uit het net bij wat de zon niet gaat brengen, op de goedkoopste momenten. Staat een van de uitgesloten apparaten aan, zoals een autolader, dan ontlaadt de accu helemaal niet, ook niet voor het huis.
 
@@ -28,7 +28,8 @@ description: |-
   BEGRIPPEN:
   - accu vol uit zon | de zon levert vandaag genoeg om de accu helemaal te vullen | er hoeft niets uit het net bij
   - bijladen op net | dit kwartier is door het package aangewezen om de accu uit het net te laden
-  - accu te krap | wat er nu in de accu zit is minder dan het huis nodig heeft tot de volgende keer bijladen | gerekend met het huisverbruik hieronder | bijladen telt pas als het minstens een uur achter elkaar is, een los laadkwartier niet | de kwartieren die hij wel kan dekken zijn de duurste tot dan
+  - volgende keer bijladen | uit het net: minstens een uur laadkwartieren achter elkaar, een los laadkwartier telt niet | komt dat niet, dan door de zon: het eerste halfuur waarin Solcast, met de marge, meer zon verwacht dan het huis trekt, als de zon daarna minstens zoveel in de accu brengt als een uur bijladen
+  - accu te krap | wat er nu in de accu zit is minder dan het huis nodig heeft tot de volgende keer bijladen | gerekend met het huisverbruik hieronder | de kwartieren die hij wel kan dekken zijn de duurste tot dan
   - uitgesloten apparaat | zolang het aan staat ontlaadt de accu niet, ook niet voor het huis | aan zodra zijn vermogenssensor boven de drempel staat | geen sensoren ingevuld is uit
 
 trigger_variables:
@@ -188,16 +189,32 @@ actions:
               spaar: >-                     # haalt de accu de volgende keer bijladen niet, en is dit kwartier niet een van de duurste tot dan
                 {% set vandaag = state_attr('sensor.dynamisch_goedkoopste_periode','raw_today') or [] %}
                 {% set morgen = state_attr('sensor.dynamisch_goedkoopste_periode','raw_tomorrow') or [] %}
-                {# het venster: de prijzen van de kwartieren van nu tot het eerstvolgende bijladen. Het package zet goedkoop 'ja' op elk laadkwartier van het plan; bijladen telt pas bij vier achter elkaar, een uur. Losse laadkwartieren tellen niet mee en komen ook niet in het venster, daarin laadt de accu #}
-                {% set ns = namespace(venster=[], blok=0) %}
+                {# bijladen door de zon: het eerste halfuur vanaf nu, het lopende halfuur meegerekend, waarin Solcast, met de marge, meer zon verwacht dan het huis trekt. Telt alleen als de zon daarna minstens zoveel in de accu brengt als een uur bijladen; zo maakt een zonnig halfuur in de winter geen eindpunt. Geen Solcast-gegevens: geen eindpunt #}
+                {% set eindpunt = namespace(zon=none) %}
+                {% if zonoverschot >= 4 * laadvermogen_per_kwartier %}
+                  {% set verwachting = (state_attr('sensor.solcast_pv_forecast_forecast_today','detailedForecast') or [])
+                                     + (state_attr('sensor.solcast_pv_forecast_forecast_tomorrow','detailedForecast') or []) %}
+                  {% for p in verwachting if eindpunt.zon is none
+                                          and (p.period_start | as_datetime) > now() - timedelta(minutes=30)
+                                          and p.pv_estimate * zon_zekerheid > huisverbruik %}
+                    {% set eindpunt.zon = p.period_start | as_datetime %}
+                  {% endfor %}
+                {% endif %}
+                {# het venster: de prijzen van de kwartieren van nu tot het eerstvolgende bijladen. Het package zet goedkoop 'ja' op elk laadkwartier van het plan; bijladen uit het net telt pas bij vier achter elkaar, een uur. Losse laadkwartieren tellen niet mee en komen ook niet in het venster, daarin laadt de accu. Daarnaast de kwartieren tot de zon overneemt, voor als er geen bijladen uit het net meer komt #}
+                {% set ns = namespace(venster=[], tot_zon=[], blok=0) %}
                 {% for q in vandaag + morgen if (q.end | as_datetime) > now() and ns.blok < 4 %}
                   {% if q.goedkoop == 'ja' %}{% set ns.blok = ns.blok + 1 %}
-                  {% else %}{% set ns.blok = 0 %}{% set ns.venster = ns.venster + [q.value] %}{% endif %}
+                  {% else %}
+                    {% set ns.blok = 0 %}{% set ns.venster = ns.venster + [q.value] %}
+                    {% if eindpunt.zon is none or (q.start | as_datetime) < eindpunt.zon %}{% set ns.tot_zon = ns.tot_zon + [q.value] %}{% endif %}
+                  {% endif %}
                 {% endfor %}
+                {# komt er bijladen uit het net, dan is dat het eindpunt; anders de zon #}
+                {% set venster = ns.venster if ns.blok >= 4 else ns.tot_zon %}
                 {# de grens: sorteer het venster van duur naar goedkoop en pak de prijs op positie kwartieren_in_accu, dat is het goedkoopste kwartier dat de accu nog kan dekken. Ligt de prijs van nu daaronder, dan hoort dit kwartier niet bij de duurste en spaart hij #}
                 {# een weggevallen laadpercentage geeft 0 kwartieren en een weggevallen prijs 999: dan spaart hij nooit #}
-                {{ kwartieren_in_accu < ns.venster | count
-                   and states('sensor.dynamisch_nordpool') | float(999) < (ns.venster | sort(reverse=true))[kwartieren_in_accu - 1] }}
+                {{ kwartieren_in_accu < venster | count
+                   and states('sensor.dynamisch_nordpool') | float(999) < (venster | sort(reverse=true))[kwartieren_in_accu - 1] }}
               plan: >-                      # het aantal laadkwartieren dat nu geldt: vanaf 23:01 dat van morgen, daarvoor dat van vandaag; om middernacht kopieert het package morgen naar vandaag, en dit loopt daar net op vooruit
                 {{ states('input_number.dynamisch_goedkoopste_x_periode_morgen') | float(0)
                    if now() >= today_at('23:01')

@@ -36,9 +36,9 @@ forecast fills the battery without the grid.
 |---|---|---|---|---|---|
 | 1 | any | planned charging quarter | any | the battery charges from the grid, the house buys its own power | `Dynamisch NOM` |
 | 2 | excluded appliance running | any | any | the house buys from the grid, the battery does not discharge at all | `Alleen slim opladen` |
-| 3 | no | not among the most expensive quarters it can still cover | too little until the next charging block | the house buys, and the battery waits for the more expensive quarters ahead | `Alleen slim opladen` |
+| 3 | no | not among the most expensive quarters it can still cover | too little until the next charge | the house buys, and the battery waits for the more expensive quarters ahead | `Alleen slim opladen` |
 | 4 | any | any | nothing to buy today, the sun fills it | the battery supplies the house, solar surplus goes in | `Nul op de meter` |
-| 5 | any | any | enough until the next charging block, or one of the most expensive quarters | the battery supplies the house, also at night when power is cheap | `Dynamisch NOM` |
+| 5 | any | any | enough until the next charge, or one of the most expensive quarters | the battery supplies the house, also at night when power is cheap | `Dynamisch NOM` |
 
 The mode names are Dutch, they come from the Gielz zenSDK package. Outside the
 charging quarters `Nul op de meter` and `Dynamisch NOM` behave the same; the
@@ -46,11 +46,19 @@ difference only shows whether there is still something to buy today.
 
 Rule 3, every quarter: the automation works out how many quarters the house can
 still run on what is in the battery, using an average house load, and looks at
-the prices from now until the next charging block, today and tomorrow together.
-A charging block is at least an hour of planned charging quarters in a row; a
-single planned quarter adds only 4 percent and does not count. If the battery
-cannot cover all quarters until then, it is kept for the most expensive ones and
-the house buys the rest from the grid. If it can, it just discharges.
+the prices from now until the next charge, today and tomorrow together.
+
+- From the grid: a charging block of at least an hour of planned charging
+  quarters in a row. A single planned quarter adds only 4 percent and does not
+  count.
+- From the sun, if no charging block is coming: the first half hour in which
+  Solcast, with the margin, expects more solar than the house draws. This only
+  counts when the sun then puts at least an hour of charging into the battery,
+  so a single sunny half hour in winter does not count.
+
+If the battery cannot cover all quarters until then, it is kept for the most
+expensive ones and the house buys the rest from the grid. If it can, it just
+discharges.
 
 The excluded appliances are optional: a list of power sensors, for example a car
 charger, with one threshold above which an appliance counts as running. Leave
@@ -112,7 +120,7 @@ Not every automation needs everything.
 | integration | provides |
 |---|---|
 | [Zendure zenSDK package](https://github.com/Gielz1986/Zendure-HA-zenSDK) | the battery entities, the mode selector and the dynamic price sensors |
-| [Solcast](https://github.com/BJReplay/ha-solcast-solar) | the solar forecast for today and tomorrow |
+| [Solcast](https://github.com/BJReplay/ha-solcast-solar) | the solar forecast for today and tomorrow, as totals and per half hour (the `detailedForecast` attribute) |
 | [Nordpool](https://github.com/custom-components/nordpool/) | the quarter-hour prices, tax and surcharges included. Take the HACS one, not the Nord Pool integration that ships with Home Assistant |
 | [Home Connect](https://www.home-assistant.io/integrations/home_connect) | the dishwasher door, program, remote start and the delayed start time |
 | [Tech Controllers](https://github.com/mariusz-ostoja-swierczynski/tech-controllers) | the heat pump: the hot water setpoint and the on/off switch |
