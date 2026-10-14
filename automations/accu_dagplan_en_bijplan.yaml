@@ -1,6 +1,6 @@
 alias: Accu dagplan en bijplan
 description: |-
-  Versie 20261013
+  Versie 20261014
 
   Vult de accu zo veel mogelijk met eigen zonnestroom, en koopt alleen uit het net bij wat de zon niet gaat brengen, op de goedkoopste momenten. Staat een van de uitgesloten apparaten aan, zoals een autolader, dan ontlaadt de accu helemaal niet, ook niet voor het huis.
 
@@ -55,9 +55,9 @@ triggers:
   - alias: Modus tegen de actuele prijs houden
     trigger: time_pattern
     minutes: /15
-    seconds: 5
+    seconds: 3
     id: modus
-    note: Zo vaak verandert de prijs. Vijf seconden na het kwartier, zodat de prijs, de laadkwartieren en om middernacht het plan van de nieuwe dag al zijn bijgewerkt.
+    note: Zo vaak verandert de prijs. Drie seconden na het kwartier, zodat de prijs, de laadkwartieren en om middernacht het plan van de nieuwe dag al zijn bijgewerkt, en tussen de runs van het package door, dat elke vijf seconden draait. Valt een wissel van stand samen met zo'n run, dan kan het package nog een ontlaadopdracht sturen die in Alleen slim opladen blijft staan.
 
   - alias: Modus direct omzetten als een uitgesloten apparaat aangaat
     trigger: template
