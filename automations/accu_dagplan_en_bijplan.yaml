@@ -1,12 +1,12 @@
 alias: Accu dagplan en bijplan
 description: |-
-  Versie 20261014
+  Versie 20261016
 
   Vult de accu zo veel mogelijk met eigen zonnestroom, en koopt alleen uit het net bij wat de zon niet gaat brengen, op de goedkoopste momenten. Staat een van de uitgesloten apparaten aan, zoals een autolader, dan ontlaadt de accu helemaal niet, ook niet voor het huis.
 
   HOE, elk uur en bij zonsondergang:
   - Hij kijkt hoeveel er nog in de accu past en hoeveel zonnestroom Solcast nog verwacht. Het verschil moet uit het net komen.
-  - Dat koopt hij in de goedkoopste kwartieren van vandaag, zolang die onder het daggemiddelde liggen. Duurder laden kost meer dan het oplevert.
+  - Dat koopt hij in de goedkoopste kwartieren van vandaag, zolang die onder het daggemiddelde liggen en goedkoop genoeg zijn voor de minimale spread van het package. Duurder laden kost meer dan het oplevert, en daaronder laadt het package niet.
   - 's Nachts rekent hij alsof de accu bij zonsopgang leeg is, zodat hij geen goedkoop nachtkwartier mist. Te veel kan niet, de accu stopt op 100 procent.
   - 's Avonds vergelijkt hij de kwartieren die vandaag nog komen met die van morgen, en koopt vanavond alleen wat goedkoper is dan morgen.
 
@@ -143,9 +143,13 @@ actions:
                 {# het gemiddelde waar een kwartier onder moet liggen: van de dagen waar hij tegen afweegt. Overdag vandaag, 's avonds vandaag en morgen samen #}
                 {% set gemiddelde = (vandaag + morgen) | rejectattr('value','none') | map(attribute='value') | average if vandaag else 0 %}
                 {% set zonsondergang = state_attr('sun.sun','next_setting') | as_datetime %}
-                {# kandidaten van vandaag: nog niet voorbij, onder het gemiddelde (duurder laden kost meer dan het oplevert), en niet na zonsondergang: die weegt de avondronde tegen morgen af. Na zonsondergang is next_setting die van morgen, dan doet dit niets meer #}
+                {# de hoogste prijs waarvoor het package nog laadt: het laadt alleen als het gemiddelde van de duurste kwartieren van vandaag minstens de minimale spread boven het gemiddelde van alle laadkwartieren ligt. Ligt elk gekozen kwartier hieronder, dan doet het gemiddelde dat ook. Geen duurste kwartieren ingesteld: geen grens #}
+                {% set aantal_duurste = states('input_number.dynamisch_duurste_x_periode') | int(0) %}
+                {% set duurste = (vandaag | rejectattr('value','none') | map(attribute='value') | sort(reverse=true))[:aantal_duurste] %}
+                {% set hoogste_laadprijs = (duurste | average) / (1 + states('input_number.dynamisch_minimale_spread') | float(0) / 100) if duurste else 999 %}
+                {# kandidaten van vandaag: nog niet voorbij, onder het gemiddelde (duurder laden kost meer dan het oplevert), onder de hoogste laadprijs (anders laadt het package niet), en niet na zonsondergang: die weegt de avondronde tegen morgen af. Na zonsondergang is next_setting die van morgen, dan doet dit niets meer #}
                 {% set ns = namespace(kandidaten=[]) %}
-                {% for q in vandaag if (q.end | as_datetime) > now() and q.value < gemiddelde and (q.start | as_datetime) < zonsondergang %}
+                {% for q in vandaag if (q.end | as_datetime) > now() and q.value < gemiddelde and q.value < hoogste_laadprijs and (q.start | as_datetime) < zonsondergang %}
                   {% set ns.kandidaten = ns.kandidaten + [q.value] %}
                 {% endfor %}
                 {# 's avonds concurreren ze met heel morgen: van de 'nodig' goedkoopste van beide dagen samen houden we alleen die van vandaag over. Overdag is morgen leeg en zijn het gewoon de 'nodig' goedkoopste kandidaten #}

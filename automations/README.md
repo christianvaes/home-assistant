@@ -97,6 +97,13 @@ battery needs less than it did an hour earlier. Quarters above the average never
 charging then costs more than it saves. During the day that is the average of today, after
 sunset the average of today and tomorrow together.
 
+Quarters the package would refuse never count either. The package only charges when the
+average of the most expensive quarters is at least its minimum spread above the average of
+all charging quarters of the day, past ones included. One quarter too close to the expensive
+ones lowers that average spread and stops all charging, also in the cheap quarters. So the
+automation only picks quarters below the average of the most expensive quarters divided by
+one plus the minimum spread: with 25 percent and expensive quarters at 0.436 that is 0.349.
+
 After sunset the quarters left today compete with all of tomorrow's. A quarter tonight is only
 bought when it is cheaper than what tomorrow offers. Without this the automation would buy the
 last quarters of the day just because the cheap ones were gone, not because they were cheap.
