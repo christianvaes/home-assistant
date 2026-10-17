@@ -36,13 +36,13 @@ forecast fills the battery without the grid.
 |---|---|---|---|---|---|
 | 1 | any | planned charging quarter | any | the battery charges from the grid, the house buys its own power | `Dynamisch NOM` |
 | 2 | excluded appliance running | any | any | the house buys from the grid, the battery does not discharge at all | `Alleen slim opladen` |
-| 3 | no | not among the most expensive quarters it can still cover | too little until the next charge | the house buys, and the battery waits for the more expensive quarters ahead | `Alleen slim opladen` |
-| 4 | any | any | nothing to buy today, the sun fills it | the battery supplies the house, solar surplus goes in | `Nul op de meter` |
+| 3 | no | not among the most expensive quarters it can still cover | too little until the next charge, and the sun will not fill it | the house buys, and the battery waits for the more expensive quarters ahead | `Alleen slim opladen` |
+| 4 | any | any | the sun fills it | the battery supplies the house, solar surplus goes in | `Nul op de meter` |
 | 5 | any | any | enough until the next charge, or one of the most expensive quarters | the battery supplies the house, also at night when power is cheap | `Dynamisch NOM` |
 
 The mode names are Dutch, they come from the Gielz zenSDK package. Outside the
 charging quarters `Nul op de meter` and `Dynamisch NOM` behave the same; the
-difference only shows whether there is still something to buy today.
+difference only shows whether the sun fills the battery.
 
 Rule 3, every quarter: the automation works out how many quarters the house can
 still run on what is in the battery, using an average house load, and looks at
@@ -93,16 +93,10 @@ The forecast covers the rest of today, not the whole day, so it shrinks as the d
 The package counts the cheapest quarters of the whole day, including ones already past, so the
 automation looks for the position in the price list where exactly the quarters it wants are
 still ahead. That is why the number it writes keeps growing during the day, even when the
-battery needs less than it did an hour earlier. Quarters above the average never count:
-charging then costs more than it saves. During the day that is the average of today, after
-sunset the average of today and tomorrow together.
-
-Quarters the package would refuse never count either. The package only charges when the
-average of the most expensive quarters is at least its minimum spread above the average of
-all charging quarters of the day, past ones included. One quarter too close to the expensive
-ones lowers that average spread and stops all charging, also in the cheap quarters. So the
-automation only picks quarters below the average of the most expensive quarters divided by
-one plus the minimum spread: with 25 percent and expensive quarters at 0.436 that is 0.349.
+battery needs less than it did an hour earlier. A quarter only counts when its price, after
+the round-trip loss, is still below the day average: charging dearer than that costs more
+than it saves. During the day that is the average of today, after sunset the average of today
+and tomorrow together.
 
 After sunset the quarters left today compete with all of tomorrow's. A quarter tonight is only
 bought when it is cheaper than what tomorrow offers. Without this the automation would buy the
@@ -126,7 +120,7 @@ Not every automation needs everything.
 
 | integration | provides |
 |---|---|
-| [Zendure zenSDK package](https://github.com/Gielz1986/Zendure-HA-zenSDK) | the battery entities, the mode selector and the dynamic price sensors |
+| [Zendure zenSDK package](https://github.com/Gielz1986/Zendure-HA-zenSDK) | the battery entities, the mode selector and the dynamic price sensors. Keep its minimum spread at 25 percent or lower, above that it can refuse the planned quarters |
 | [Solcast](https://github.com/BJReplay/ha-solcast-solar) | the solar forecast for today and tomorrow, as totals and per half hour (the `detailedForecast` attribute) |
 | [Nordpool](https://github.com/custom-components/nordpool/) | the quarter-hour prices, tax and surcharges included. Take the HACS one, not the Nord Pool integration that ships with Home Assistant |
 | [Home Connect](https://www.home-assistant.io/integrations/home_connect) | the dishwasher door, program, remote start and the delayed start time |
