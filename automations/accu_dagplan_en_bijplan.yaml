@@ -1,6 +1,6 @@
 alias: Accu dagplan en bijplan
 description: |-
-  Versie 20261017
+  Versie 20261022
 
   Vult de accu zo veel mogelijk met eigen zonnestroom, en koopt alleen uit het net bij wat de zon niet gaat brengen, op de goedkoopste momenten. Staat een van de uitgesloten apparaten aan, zoals een autolader, dan ontlaadt de accu helemaal niet, ook niet voor het huis.
 
@@ -67,6 +67,11 @@ triggers:
          | select('gt', uitgesloten_apparaten_vanaf_vermogen) | list | count == 0 }}
     id: modus
 
+conditions:
+  - alias: Alleen als de accu bereikbaar is
+    condition: template
+    value_template: "{{ states('sensor.zendure_2400_ac_laadpercentage') | is_number }}"   # het laadpercentage komt van de accu zelf; is het onbekend, dan is de verbinding even weg en kan hij de accu toch niet aansturen. Plan en modus blijven dan staan, de volgende ronde rekent hij gewoon weer
+
 variables:
   # ---- aan te passen aan jouw situatie ----
   rendement: 0.87                   # round trip, iets onder de bij mij gemeten 87,6 procent; het package heeft er een sensor voor
@@ -96,7 +101,7 @@ variables:
        | select('gt', uitgesloten_apparaten_vanaf_vermogen) | list | count > 0 }}
 
   # ---- hoeveel er in de accu past op het moment dat de zon weer schijnt ----
-  soc: >-                           # hoe vol de accu nu is, in procenten
+  soc: >-                           # hoe vol de accu nu is, in procenten. De terugval voorkomt alleen een foutmelding: is het percentage onbekend, dan stopt de voorwaarde bovenin de run
     {{ states('sensor.zendure_2400_ac_laadpercentage') | float(soc_minimum) }}
   ruimte_in_accu: >-                # hoeveel kWh er nog in de accu bij kan. Overdag: de echte ruimte van nu. 's Nachts: de hele accu, alsof hij bij zonsopgang leeg is; zo mist hij nooit goedkope nachtkwartieren, en te veel kan niet want de accu stopt op 100 procent
     {{ accu_inhoud * (soc_maximum - soc_minimum) / 100
@@ -165,8 +170,11 @@ actions:
                 target:
                   entity_id: input_number.dynamisch_goedkoopste_x_periode_morgen
                 data:
-                  value: "{{ nodig }}"
-                note: Wat vanavond gekocht wordt gaat er niet af, want wat 's nachts in de accu zit is bij zonsopgang toch verbruikt. Om 00:05 rekent de dagronde het opnieuw uit.
+                  value: >-
+                    {% set prijzen_morgen = (state_attr('sensor.dynamisch_nordpool','raw_tomorrow') or []) | rejectattr('value','none') | map(attribute='value') | list %}
+                    {% set lonende_kwartieren = prijzen_morgen | select('lt', (prijzen_morgen | average) * rendement) | list | count if prijzen_morgen else nodig %}
+                    {{ [ nodig, lonende_kwartieren ] | min }}
+                note: Zet voor morgen alleen de kwartieren klaar waarin laden loont. Zo weet de accu 's avonds al of hij vannacht kan laden, of dat hij moet sparen voor de ochtend.
 
       # ==================================================================
       # MODUS: ontladen of inkopen, elk kwartier opnieuw bekeken
@@ -205,7 +213,7 @@ actions:
                 {# komt er bijladen uit het net, dan is dat het eindpunt; anders de zon #}
                 {% set venster = ns.venster if ns.blok >= 4 else ns.tot_zon %}
                 {# de grens: sorteer het venster van duur naar goedkoop en pak de prijs op positie kwartieren_in_accu, dat is het goedkoopste kwartier dat de accu nog kan dekken. Ligt de prijs van nu daaronder, dan hoort dit kwartier niet bij de duurste en spaart hij #}
-                {# een weggevallen laadpercentage geeft 0 kwartieren en een weggevallen prijs 999: dan spaart hij nooit #}
+                {# een weggevallen prijs geeft 999: dan spaart hij niet #}
                 {{ kwartieren_in_accu < venster | count
                    and states('sensor.dynamisch_nordpool') | float(999) < (venster | sort(reverse=true))[kwartieren_in_accu - 1] }}
               gewenst: >-                   # de modus volgens de regels uit de beschrijving; nodig is 0 als de zon de accu vult
