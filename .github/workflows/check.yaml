@@ -4,9 +4,10 @@ on:
   push:
     branches: [main]
   pull_request:
-  # every Monday, so a new Home Assistant release that breaks an automation shows up before updating
+  # every Thursday, the morning after a Home Assistant release or beta (both on Wednesday evening),
+  # so a version that breaks an automation shows up before updating
   schedule:
-    - cron: "0 6 * * 1"
+    - cron: "0 6 * * 4"
   workflow_dispatch:
 
 jobs:
@@ -24,9 +25,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # a failing beta turns the run red, so GitHub sends a mail before the release
         version: [stable, beta]
-    # a failing beta is an early warning, not a broken repository
-    continue-on-error: ${{ matrix.version == 'beta' }}
     steps:
       - uses: actions/checkout@v7
       - name: Check the configuration

@@ -1,0 +1,7 @@
+version: 2
+updates:
+  # the workflow is the only place with pinned versions
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
