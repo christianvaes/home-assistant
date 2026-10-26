@@ -1,6 +1,6 @@
 alias: Vaatwasser starten op de goedkoopste prijs
 description: |-
-  Versie 20261003
+  Versie 20261003 · https://github.com/christianvaes/home-assistant
 
   Druk op start op afstand en sluit de deur. Home Assistant zet auto 2 en start dat met
   uitstel tot het goedkoopste blok dat voor 18:00 klaar is. Lukt dat vandaag niet meer, dan

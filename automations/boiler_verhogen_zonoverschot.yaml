@@ -1,6 +1,6 @@
 alias: Boiler verhogen zonoverschot
 description: |-
-  Versie 20261003
+  Versie 20261003 · https://github.com/christianvaes/home-assistant
 
   Verhoogt de warmwater-setpoint van de 58 van EPEX naar 65 als je meer terugleverde dan de boiler zelf trekt. Teruglevering is per definitie wat de accu niet kwijt kan, dus dan is het echt over.
 triggers:
