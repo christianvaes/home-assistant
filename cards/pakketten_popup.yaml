@@ -1,0 +1,633 @@
+# Versie 20261105 · https://github.com/christianvaes/home-assistant
+#
+# Pop-up met een gekleurde balk per pakket dat onderweg is, en een balk voor de
+# brieven van PostNL. Een klik op een balk opent de trackpagina van dat pakket.
+# Wat je nodig hebt en hoe je hem plaatst: zie README.md in deze map.
+#
+# De pakketten komen uit de Parcel Aggregator, dus elke vervoerder die daarin
+# zit komt vanzelf mee. Heet jouw sensor anders dan
+#   sensor.parcel_aggregator_inkomende_pakketten
+# vervang die naam dan overal in dit bestand.
+type: custom:bubble-card
+card_type: pop-up
+hash: "#pakketten"                      # de tegel opent de pop-up met navigate naar #pakketten
+button_type: name                       # gewone titel, zonder entiteit en kleur
+name: Verwachte pakketten
+icon: mdi:package-variant-closed
+popup_mode: fit-content                 # de pop-up is zo hoog als de balken erin
+cards:
+  # ==================================================================
+  # PAKKET 1
+  # ==================================================================
+  # Elk pakket is een eigen kaartje. Zo verdwijnt een lege plek helemaal en
+  # groeit de pop-up mee met het aantal pakketten. Er zijn 8 plekken; wil je er
+  # meer, kopieer dan het laatste kaartje en hoog alle nummers met 1 op.
+  - type: custom:bubble-card
+    card_type: sub-buttons
+    hide_main_background: true
+    rows: 0.75                          # hoogte van één balk
+    visibility:
+      - condition: numeric_state
+        entity: sensor.parcel_aggregator_inkomende_pakketten
+        above: 0                            # tonen vanaf 1 pakket; bij pakket 2 staat hier 1, enzovoort
+    sub_button:
+      bottom:
+        - group:
+            - entity: sensor.parcel_aggregator_inkomende_pakketten
+              icon: mdi:package-variant-closed
+              show_name: true
+              state_background: false
+              css_class: pakket-1
+              # Naam: vervoerder en afzender. Amazon geeft geen afzender door,
+              # daarom zoekt de kaart het product op in de Amazon-integratie.
+              name: |-
+                {%- set pakketten = state_attr(entity, 'parcels') or [] -%}
+                {%- set pakket = pakketten[0] if pakketten | count > 0 else {} -%}
+                {%- set amazon = integration_entities('amazon_orders') | map('state_attr', 'parcels') | select | sum(start=[]) | selectattr('barcode', 'eq', pakket.get('barcode')) | list if pakket.get('barcode') else [] -%}
+                {%- set raw = (amazon[0].raw if amazon else none) or {} -%}
+                {%- set producten = raw.get('items') or [] -%}
+                {%- set afzender = pakket.get('sender') or (producten[0].split(',')[0] | truncate(28) if producten else none) or ('Amazon' if (pakket.get('barcode') or '').startswith('AMZN') else 'Pakket') -%}
+                {{ pakket.get('carrier') or 'Pakket' }} · {{ afzender }}
+              # Tweede regel: het tijdvak van de bezorging. Zonder tijdvak de
+              # status van Amazon, of anders "Nog geen tijd".
+              state_content: |-
+                {%- set pakketten = state_attr(entity, 'parcels') or [] -%}
+                {%- set pakket = pakketten[0] if pakketten | count > 0 else {} -%}
+                {%- set amazon = integration_entities('amazon_orders') | map('state_attr', 'parcels') | select | sum(start=[]) | selectattr('barcode', 'eq', pakket.get('barcode')) | list if pakket.get('barcode') else [] -%}
+                {%- set raw = (amazon[0].raw if amazon else none) or {} -%}
+                {%- set van = as_local(as_datetime(pakket.planned_from)) if pakket.get('planned_from') else none -%}
+                {%- set tot = as_local(as_datetime(pakket.planned_to)) if pakket.get('planned_to') else none -%}
+                {%- if van and tot -%}
+                  {{ van.strftime('%-d-%-m · %H:%M') }}–{{ tot.strftime('%H:%M') }}
+                {%- elif van -%}
+                  {{ van.strftime('%-d-%-m') if van.strftime('%H:%M') == '00:00' else van.strftime('%-d-%-m · %H:%M') }}
+                {%- else -%}
+                  {{ raw.get('order_status') or 'Nog geen tijd' }}
+                {%- endif -%}
+              # Zonder werkend script opent een klik de details van de aggregator
+              tap_action:
+                action: more-info
+    # Kleur van de balk per vervoerder. Daaronder een klein script: Bubble Card
+    # kan geen link per pakket instellen, dus het script vervangt bij een klik
+    # de actie door de trackpagina van het pakket. De DHL-link krijgt van de
+    # integratie de postcode erachter, die pagina werkt alleen zonder.
+    styles: |
+      {%- set pakketten = state_attr('sensor.parcel_aggregator_inkomende_pakketten', 'parcels') or [] -%}
+      {%- set pakket = pakketten[0] if pakketten | count > 0 else {} -%}
+      {%- set kleuren = {
+        'PostNL': ['#FF6200', '#fff'],
+        'DHL': ['#FFCC00', '#D40511'],
+        'DPD': ['#DC0032', '#fff'],
+        'Dragonfly': ['#1E1B4B', '#fff'],
+        'Amazon': ['#232F3E', '#FF9900'],
+      } -%}
+      {%- set kleur = kleuren.get(pakket.get('carrier'), ['var(--primary-color)', '#fff']) %}
+      .pakket-1 { --bubble-sub-button-background-color: {{ kleur[0] }}; color: {{ kleur[1] }}; }
+      ${(() => {
+        const pakket = hass.states['sensor.parcel_aggregator_inkomende_pakketten']?.attributes.parcels?.[0];
+        const url = pakket?.url || '';
+        card.dataset.url = url.includes('dhlecommerce')
+          ? 'https://my.dhlecommerce.nl/portal/tracktrace/' + pakket.barcode
+          : url;
+        if (!card.dataset.klik) {
+          card.dataset.klik = '1';
+          card.addEventListener('hass-action', (event) => {
+            if (card.dataset.url && event.detail?.action === 'tap') {
+              event.detail.config = { ...event.detail.config, tap_action: { action: 'url', url_path: card.dataset.url } };
+            }
+          }, true);
+        }
+        return '';
+      })()}
+
+  # ==================================================================
+  # PAKKET 2  (gelijk aan pakket 1, alleen het nummer verschilt)
+  # ==================================================================
+  - type: custom:bubble-card
+    card_type: sub-buttons
+    hide_main_background: true
+    rows: 0.75
+    visibility:
+      - condition: numeric_state
+        entity: sensor.parcel_aggregator_inkomende_pakketten
+        above: 1
+    sub_button:
+      bottom:
+        - group:
+            - entity: sensor.parcel_aggregator_inkomende_pakketten
+              icon: mdi:package-variant-closed
+              show_name: true
+              state_background: false
+              css_class: pakket-2
+              name: |-
+                {%- set pakketten = state_attr(entity, 'parcels') or [] -%}
+                {%- set pakket = pakketten[1] if pakketten | count > 1 else {} -%}
+                {%- set amazon = integration_entities('amazon_orders') | map('state_attr', 'parcels') | select | sum(start=[]) | selectattr('barcode', 'eq', pakket.get('barcode')) | list if pakket.get('barcode') else [] -%}
+                {%- set raw = (amazon[0].raw if amazon else none) or {} -%}
+                {%- set producten = raw.get('items') or [] -%}
+                {%- set afzender = pakket.get('sender') or (producten[0].split(',')[0] | truncate(28) if producten else none) or ('Amazon' if (pakket.get('barcode') or '').startswith('AMZN') else 'Pakket') -%}
+                {{ pakket.get('carrier') or 'Pakket' }} · {{ afzender }}
+              state_content: |-
+                {%- set pakketten = state_attr(entity, 'parcels') or [] -%}
+                {%- set pakket = pakketten[1] if pakketten | count > 1 else {} -%}
+                {%- set amazon = integration_entities('amazon_orders') | map('state_attr', 'parcels') | select | sum(start=[]) | selectattr('barcode', 'eq', pakket.get('barcode')) | list if pakket.get('barcode') else [] -%}
+                {%- set raw = (amazon[0].raw if amazon else none) or {} -%}
+                {%- set van = as_local(as_datetime(pakket.planned_from)) if pakket.get('planned_from') else none -%}
+                {%- set tot = as_local(as_datetime(pakket.planned_to)) if pakket.get('planned_to') else none -%}
+                {%- if van and tot -%}
+                  {{ van.strftime('%-d-%-m · %H:%M') }}–{{ tot.strftime('%H:%M') }}
+                {%- elif van -%}
+                  {{ van.strftime('%-d-%-m') if van.strftime('%H:%M') == '00:00' else van.strftime('%-d-%-m · %H:%M') }}
+                {%- else -%}
+                  {{ raw.get('order_status') or 'Nog geen tijd' }}
+                {%- endif -%}
+              tap_action:
+                action: more-info
+    styles: |
+      {%- set pakketten = state_attr('sensor.parcel_aggregator_inkomende_pakketten', 'parcels') or [] -%}
+      {%- set pakket = pakketten[1] if pakketten | count > 1 else {} -%}
+      {%- set kleuren = {
+        'PostNL': ['#FF6200', '#fff'],
+        'DHL': ['#FFCC00', '#D40511'],
+        'DPD': ['#DC0032', '#fff'],
+        'Dragonfly': ['#1E1B4B', '#fff'],
+        'Amazon': ['#232F3E', '#FF9900'],
+      } -%}
+      {%- set kleur = kleuren.get(pakket.get('carrier'), ['var(--primary-color)', '#fff']) %}
+      .pakket-2 { --bubble-sub-button-background-color: {{ kleur[0] }}; color: {{ kleur[1] }}; }
+      ${(() => {
+        const pakket = hass.states['sensor.parcel_aggregator_inkomende_pakketten']?.attributes.parcels?.[1];
+        const url = pakket?.url || '';
+        card.dataset.url = url.includes('dhlecommerce')
+          ? 'https://my.dhlecommerce.nl/portal/tracktrace/' + pakket.barcode
+          : url;
+        if (!card.dataset.klik) {
+          card.dataset.klik = '1';
+          card.addEventListener('hass-action', (event) => {
+            if (card.dataset.url && event.detail?.action === 'tap') {
+              event.detail.config = { ...event.detail.config, tap_action: { action: 'url', url_path: card.dataset.url } };
+            }
+          }, true);
+        }
+        return '';
+      })()}
+
+  # ==================================================================
+  # PAKKET 3  (gelijk aan pakket 1, alleen het nummer verschilt)
+  # ==================================================================
+  - type: custom:bubble-card
+    card_type: sub-buttons
+    hide_main_background: true
+    rows: 0.75
+    visibility:
+      - condition: numeric_state
+        entity: sensor.parcel_aggregator_inkomende_pakketten
+        above: 2
+    sub_button:
+      bottom:
+        - group:
+            - entity: sensor.parcel_aggregator_inkomende_pakketten
+              icon: mdi:package-variant-closed
+              show_name: true
+              state_background: false
+              css_class: pakket-3
+              name: |-
+                {%- set pakketten = state_attr(entity, 'parcels') or [] -%}
+                {%- set pakket = pakketten[2] if pakketten | count > 2 else {} -%}
+                {%- set amazon = integration_entities('amazon_orders') | map('state_attr', 'parcels') | select | sum(start=[]) | selectattr('barcode', 'eq', pakket.get('barcode')) | list if pakket.get('barcode') else [] -%}
+                {%- set raw = (amazon[0].raw if amazon else none) or {} -%}
+                {%- set producten = raw.get('items') or [] -%}
+                {%- set afzender = pakket.get('sender') or (producten[0].split(',')[0] | truncate(28) if producten else none) or ('Amazon' if (pakket.get('barcode') or '').startswith('AMZN') else 'Pakket') -%}
+                {{ pakket.get('carrier') or 'Pakket' }} · {{ afzender }}
+              state_content: |-
+                {%- set pakketten = state_attr(entity, 'parcels') or [] -%}
+                {%- set pakket = pakketten[2] if pakketten | count > 2 else {} -%}
+                {%- set amazon = integration_entities('amazon_orders') | map('state_attr', 'parcels') | select | sum(start=[]) | selectattr('barcode', 'eq', pakket.get('barcode')) | list if pakket.get('barcode') else [] -%}
+                {%- set raw = (amazon[0].raw if amazon else none) or {} -%}
+                {%- set van = as_local(as_datetime(pakket.planned_from)) if pakket.get('planned_from') else none -%}
+                {%- set tot = as_local(as_datetime(pakket.planned_to)) if pakket.get('planned_to') else none -%}
+                {%- if van and tot -%}
+                  {{ van.strftime('%-d-%-m · %H:%M') }}–{{ tot.strftime('%H:%M') }}
+                {%- elif van -%}
+                  {{ van.strftime('%-d-%-m') if van.strftime('%H:%M') == '00:00' else van.strftime('%-d-%-m · %H:%M') }}
+                {%- else -%}
+                  {{ raw.get('order_status') or 'Nog geen tijd' }}
+                {%- endif -%}
+              tap_action:
+                action: more-info
+    styles: |
+      {%- set pakketten = state_attr('sensor.parcel_aggregator_inkomende_pakketten', 'parcels') or [] -%}
+      {%- set pakket = pakketten[2] if pakketten | count > 2 else {} -%}
+      {%- set kleuren = {
+        'PostNL': ['#FF6200', '#fff'],
+        'DHL': ['#FFCC00', '#D40511'],
+        'DPD': ['#DC0032', '#fff'],
+        'Dragonfly': ['#1E1B4B', '#fff'],
+        'Amazon': ['#232F3E', '#FF9900'],
+      } -%}
+      {%- set kleur = kleuren.get(pakket.get('carrier'), ['var(--primary-color)', '#fff']) %}
+      .pakket-3 { --bubble-sub-button-background-color: {{ kleur[0] }}; color: {{ kleur[1] }}; }
+      ${(() => {
+        const pakket = hass.states['sensor.parcel_aggregator_inkomende_pakketten']?.attributes.parcels?.[2];
+        const url = pakket?.url || '';
+        card.dataset.url = url.includes('dhlecommerce')
+          ? 'https://my.dhlecommerce.nl/portal/tracktrace/' + pakket.barcode
+          : url;
+        if (!card.dataset.klik) {
+          card.dataset.klik = '1';
+          card.addEventListener('hass-action', (event) => {
+            if (card.dataset.url && event.detail?.action === 'tap') {
+              event.detail.config = { ...event.detail.config, tap_action: { action: 'url', url_path: card.dataset.url } };
+            }
+          }, true);
+        }
+        return '';
+      })()}
+
+  # ==================================================================
+  # PAKKET 4  (gelijk aan pakket 1, alleen het nummer verschilt)
+  # ==================================================================
+  - type: custom:bubble-card
+    card_type: sub-buttons
+    hide_main_background: true
+    rows: 0.75
+    visibility:
+      - condition: numeric_state
+        entity: sensor.parcel_aggregator_inkomende_pakketten
+        above: 3
+    sub_button:
+      bottom:
+        - group:
+            - entity: sensor.parcel_aggregator_inkomende_pakketten
+              icon: mdi:package-variant-closed
+              show_name: true
+              state_background: false
+              css_class: pakket-4
+              name: |-
+                {%- set pakketten = state_attr(entity, 'parcels') or [] -%}
+                {%- set pakket = pakketten[3] if pakketten | count > 3 else {} -%}
+                {%- set amazon = integration_entities('amazon_orders') | map('state_attr', 'parcels') | select | sum(start=[]) | selectattr('barcode', 'eq', pakket.get('barcode')) | list if pakket.get('barcode') else [] -%}
+                {%- set raw = (amazon[0].raw if amazon else none) or {} -%}
+                {%- set producten = raw.get('items') or [] -%}
+                {%- set afzender = pakket.get('sender') or (producten[0].split(',')[0] | truncate(28) if producten else none) or ('Amazon' if (pakket.get('barcode') or '').startswith('AMZN') else 'Pakket') -%}
+                {{ pakket.get('carrier') or 'Pakket' }} · {{ afzender }}
+              state_content: |-
+                {%- set pakketten = state_attr(entity, 'parcels') or [] -%}
+                {%- set pakket = pakketten[3] if pakketten | count > 3 else {} -%}
+                {%- set amazon = integration_entities('amazon_orders') | map('state_attr', 'parcels') | select | sum(start=[]) | selectattr('barcode', 'eq', pakket.get('barcode')) | list if pakket.get('barcode') else [] -%}
+                {%- set raw = (amazon[0].raw if amazon else none) or {} -%}
+                {%- set van = as_local(as_datetime(pakket.planned_from)) if pakket.get('planned_from') else none -%}
+                {%- set tot = as_local(as_datetime(pakket.planned_to)) if pakket.get('planned_to') else none -%}
+                {%- if van and tot -%}
+                  {{ van.strftime('%-d-%-m · %H:%M') }}–{{ tot.strftime('%H:%M') }}
+                {%- elif van -%}
+                  {{ van.strftime('%-d-%-m') if van.strftime('%H:%M') == '00:00' else van.strftime('%-d-%-m · %H:%M') }}
+                {%- else -%}
+                  {{ raw.get('order_status') or 'Nog geen tijd' }}
+                {%- endif -%}
+              tap_action:
+                action: more-info
+    styles: |
+      {%- set pakketten = state_attr('sensor.parcel_aggregator_inkomende_pakketten', 'parcels') or [] -%}
+      {%- set pakket = pakketten[3] if pakketten | count > 3 else {} -%}
+      {%- set kleuren = {
+        'PostNL': ['#FF6200', '#fff'],
+        'DHL': ['#FFCC00', '#D40511'],
+        'DPD': ['#DC0032', '#fff'],
+        'Dragonfly': ['#1E1B4B', '#fff'],
+        'Amazon': ['#232F3E', '#FF9900'],
+      } -%}
+      {%- set kleur = kleuren.get(pakket.get('carrier'), ['var(--primary-color)', '#fff']) %}
+      .pakket-4 { --bubble-sub-button-background-color: {{ kleur[0] }}; color: {{ kleur[1] }}; }
+      ${(() => {
+        const pakket = hass.states['sensor.parcel_aggregator_inkomende_pakketten']?.attributes.parcels?.[3];
+        const url = pakket?.url || '';
+        card.dataset.url = url.includes('dhlecommerce')
+          ? 'https://my.dhlecommerce.nl/portal/tracktrace/' + pakket.barcode
+          : url;
+        if (!card.dataset.klik) {
+          card.dataset.klik = '1';
+          card.addEventListener('hass-action', (event) => {
+            if (card.dataset.url && event.detail?.action === 'tap') {
+              event.detail.config = { ...event.detail.config, tap_action: { action: 'url', url_path: card.dataset.url } };
+            }
+          }, true);
+        }
+        return '';
+      })()}
+
+  # ==================================================================
+  # PAKKET 5  (gelijk aan pakket 1, alleen het nummer verschilt)
+  # ==================================================================
+  - type: custom:bubble-card
+    card_type: sub-buttons
+    hide_main_background: true
+    rows: 0.75
+    visibility:
+      - condition: numeric_state
+        entity: sensor.parcel_aggregator_inkomende_pakketten
+        above: 4
+    sub_button:
+      bottom:
+        - group:
+            - entity: sensor.parcel_aggregator_inkomende_pakketten
+              icon: mdi:package-variant-closed
+              show_name: true
+              state_background: false
+              css_class: pakket-5
+              name: |-
+                {%- set pakketten = state_attr(entity, 'parcels') or [] -%}
+                {%- set pakket = pakketten[4] if pakketten | count > 4 else {} -%}
+                {%- set amazon = integration_entities('amazon_orders') | map('state_attr', 'parcels') | select | sum(start=[]) | selectattr('barcode', 'eq', pakket.get('barcode')) | list if pakket.get('barcode') else [] -%}
+                {%- set raw = (amazon[0].raw if amazon else none) or {} -%}
+                {%- set producten = raw.get('items') or [] -%}
+                {%- set afzender = pakket.get('sender') or (producten[0].split(',')[0] | truncate(28) if producten else none) or ('Amazon' if (pakket.get('barcode') or '').startswith('AMZN') else 'Pakket') -%}
+                {{ pakket.get('carrier') or 'Pakket' }} · {{ afzender }}
+              state_content: |-
+                {%- set pakketten = state_attr(entity, 'parcels') or [] -%}
+                {%- set pakket = pakketten[4] if pakketten | count > 4 else {} -%}
+                {%- set amazon = integration_entities('amazon_orders') | map('state_attr', 'parcels') | select | sum(start=[]) | selectattr('barcode', 'eq', pakket.get('barcode')) | list if pakket.get('barcode') else [] -%}
+                {%- set raw = (amazon[0].raw if amazon else none) or {} -%}
+                {%- set van = as_local(as_datetime(pakket.planned_from)) if pakket.get('planned_from') else none -%}
+                {%- set tot = as_local(as_datetime(pakket.planned_to)) if pakket.get('planned_to') else none -%}
+                {%- if van and tot -%}
+                  {{ van.strftime('%-d-%-m · %H:%M') }}–{{ tot.strftime('%H:%M') }}
+                {%- elif van -%}
+                  {{ van.strftime('%-d-%-m') if van.strftime('%H:%M') == '00:00' else van.strftime('%-d-%-m · %H:%M') }}
+                {%- else -%}
+                  {{ raw.get('order_status') or 'Nog geen tijd' }}
+                {%- endif -%}
+              tap_action:
+                action: more-info
+    styles: |
+      {%- set pakketten = state_attr('sensor.parcel_aggregator_inkomende_pakketten', 'parcels') or [] -%}
+      {%- set pakket = pakketten[4] if pakketten | count > 4 else {} -%}
+      {%- set kleuren = {
+        'PostNL': ['#FF6200', '#fff'],
+        'DHL': ['#FFCC00', '#D40511'],
+        'DPD': ['#DC0032', '#fff'],
+        'Dragonfly': ['#1E1B4B', '#fff'],
+        'Amazon': ['#232F3E', '#FF9900'],
+      } -%}
+      {%- set kleur = kleuren.get(pakket.get('carrier'), ['var(--primary-color)', '#fff']) %}
+      .pakket-5 { --bubble-sub-button-background-color: {{ kleur[0] }}; color: {{ kleur[1] }}; }
+      ${(() => {
+        const pakket = hass.states['sensor.parcel_aggregator_inkomende_pakketten']?.attributes.parcels?.[4];
+        const url = pakket?.url || '';
+        card.dataset.url = url.includes('dhlecommerce')
+          ? 'https://my.dhlecommerce.nl/portal/tracktrace/' + pakket.barcode
+          : url;
+        if (!card.dataset.klik) {
+          card.dataset.klik = '1';
+          card.addEventListener('hass-action', (event) => {
+            if (card.dataset.url && event.detail?.action === 'tap') {
+              event.detail.config = { ...event.detail.config, tap_action: { action: 'url', url_path: card.dataset.url } };
+            }
+          }, true);
+        }
+        return '';
+      })()}
+
+  # ==================================================================
+  # PAKKET 6  (gelijk aan pakket 1, alleen het nummer verschilt)
+  # ==================================================================
+  - type: custom:bubble-card
+    card_type: sub-buttons
+    hide_main_background: true
+    rows: 0.75
+    visibility:
+      - condition: numeric_state
+        entity: sensor.parcel_aggregator_inkomende_pakketten
+        above: 5
+    sub_button:
+      bottom:
+        - group:
+            - entity: sensor.parcel_aggregator_inkomende_pakketten
+              icon: mdi:package-variant-closed
+              show_name: true
+              state_background: false
+              css_class: pakket-6
+              name: |-
+                {%- set pakketten = state_attr(entity, 'parcels') or [] -%}
+                {%- set pakket = pakketten[5] if pakketten | count > 5 else {} -%}
+                {%- set amazon = integration_entities('amazon_orders') | map('state_attr', 'parcels') | select | sum(start=[]) | selectattr('barcode', 'eq', pakket.get('barcode')) | list if pakket.get('barcode') else [] -%}
+                {%- set raw = (amazon[0].raw if amazon else none) or {} -%}
+                {%- set producten = raw.get('items') or [] -%}
+                {%- set afzender = pakket.get('sender') or (producten[0].split(',')[0] | truncate(28) if producten else none) or ('Amazon' if (pakket.get('barcode') or '').startswith('AMZN') else 'Pakket') -%}
+                {{ pakket.get('carrier') or 'Pakket' }} · {{ afzender }}
+              state_content: |-
+                {%- set pakketten = state_attr(entity, 'parcels') or [] -%}
+                {%- set pakket = pakketten[5] if pakketten | count > 5 else {} -%}
+                {%- set amazon = integration_entities('amazon_orders') | map('state_attr', 'parcels') | select | sum(start=[]) | selectattr('barcode', 'eq', pakket.get('barcode')) | list if pakket.get('barcode') else [] -%}
+                {%- set raw = (amazon[0].raw if amazon else none) or {} -%}
+                {%- set van = as_local(as_datetime(pakket.planned_from)) if pakket.get('planned_from') else none -%}
+                {%- set tot = as_local(as_datetime(pakket.planned_to)) if pakket.get('planned_to') else none -%}
+                {%- if van and tot -%}
+                  {{ van.strftime('%-d-%-m · %H:%M') }}–{{ tot.strftime('%H:%M') }}
+                {%- elif van -%}
+                  {{ van.strftime('%-d-%-m') if van.strftime('%H:%M') == '00:00' else van.strftime('%-d-%-m · %H:%M') }}
+                {%- else -%}
+                  {{ raw.get('order_status') or 'Nog geen tijd' }}
+                {%- endif -%}
+              tap_action:
+                action: more-info
+    styles: |
+      {%- set pakketten = state_attr('sensor.parcel_aggregator_inkomende_pakketten', 'parcels') or [] -%}
+      {%- set pakket = pakketten[5] if pakketten | count > 5 else {} -%}
+      {%- set kleuren = {
+        'PostNL': ['#FF6200', '#fff'],
+        'DHL': ['#FFCC00', '#D40511'],
+        'DPD': ['#DC0032', '#fff'],
+        'Dragonfly': ['#1E1B4B', '#fff'],
+        'Amazon': ['#232F3E', '#FF9900'],
+      } -%}
+      {%- set kleur = kleuren.get(pakket.get('carrier'), ['var(--primary-color)', '#fff']) %}
+      .pakket-6 { --bubble-sub-button-background-color: {{ kleur[0] }}; color: {{ kleur[1] }}; }
+      ${(() => {
+        const pakket = hass.states['sensor.parcel_aggregator_inkomende_pakketten']?.attributes.parcels?.[5];
+        const url = pakket?.url || '';
+        card.dataset.url = url.includes('dhlecommerce')
+          ? 'https://my.dhlecommerce.nl/portal/tracktrace/' + pakket.barcode
+          : url;
+        if (!card.dataset.klik) {
+          card.dataset.klik = '1';
+          card.addEventListener('hass-action', (event) => {
+            if (card.dataset.url && event.detail?.action === 'tap') {
+              event.detail.config = { ...event.detail.config, tap_action: { action: 'url', url_path: card.dataset.url } };
+            }
+          }, true);
+        }
+        return '';
+      })()}
+
+  # ==================================================================
+  # PAKKET 7  (gelijk aan pakket 1, alleen het nummer verschilt)
+  # ==================================================================
+  - type: custom:bubble-card
+    card_type: sub-buttons
+    hide_main_background: true
+    rows: 0.75
+    visibility:
+      - condition: numeric_state
+        entity: sensor.parcel_aggregator_inkomende_pakketten
+        above: 6
+    sub_button:
+      bottom:
+        - group:
+            - entity: sensor.parcel_aggregator_inkomende_pakketten
+              icon: mdi:package-variant-closed
+              show_name: true
+              state_background: false
+              css_class: pakket-7
+              name: |-
+                {%- set pakketten = state_attr(entity, 'parcels') or [] -%}
+                {%- set pakket = pakketten[6] if pakketten | count > 6 else {} -%}
+                {%- set amazon = integration_entities('amazon_orders') | map('state_attr', 'parcels') | select | sum(start=[]) | selectattr('barcode', 'eq', pakket.get('barcode')) | list if pakket.get('barcode') else [] -%}
+                {%- set raw = (amazon[0].raw if amazon else none) or {} -%}
+                {%- set producten = raw.get('items') or [] -%}
+                {%- set afzender = pakket.get('sender') or (producten[0].split(',')[0] | truncate(28) if producten else none) or ('Amazon' if (pakket.get('barcode') or '').startswith('AMZN') else 'Pakket') -%}
+                {{ pakket.get('carrier') or 'Pakket' }} · {{ afzender }}
+              state_content: |-
+                {%- set pakketten = state_attr(entity, 'parcels') or [] -%}
+                {%- set pakket = pakketten[6] if pakketten | count > 6 else {} -%}
+                {%- set amazon = integration_entities('amazon_orders') | map('state_attr', 'parcels') | select | sum(start=[]) | selectattr('barcode', 'eq', pakket.get('barcode')) | list if pakket.get('barcode') else [] -%}
+                {%- set raw = (amazon[0].raw if amazon else none) or {} -%}
+                {%- set van = as_local(as_datetime(pakket.planned_from)) if pakket.get('planned_from') else none -%}
+                {%- set tot = as_local(as_datetime(pakket.planned_to)) if pakket.get('planned_to') else none -%}
+                {%- if van and tot -%}
+                  {{ van.strftime('%-d-%-m · %H:%M') }}–{{ tot.strftime('%H:%M') }}
+                {%- elif van -%}
+                  {{ van.strftime('%-d-%-m') if van.strftime('%H:%M') == '00:00' else van.strftime('%-d-%-m · %H:%M') }}
+                {%- else -%}
+                  {{ raw.get('order_status') or 'Nog geen tijd' }}
+                {%- endif -%}
+              tap_action:
+                action: more-info
+    styles: |
+      {%- set pakketten = state_attr('sensor.parcel_aggregator_inkomende_pakketten', 'parcels') or [] -%}
+      {%- set pakket = pakketten[6] if pakketten | count > 6 else {} -%}
+      {%- set kleuren = {
+        'PostNL': ['#FF6200', '#fff'],
+        'DHL': ['#FFCC00', '#D40511'],
+        'DPD': ['#DC0032', '#fff'],
+        'Dragonfly': ['#1E1B4B', '#fff'],
+        'Amazon': ['#232F3E', '#FF9900'],
+      } -%}
+      {%- set kleur = kleuren.get(pakket.get('carrier'), ['var(--primary-color)', '#fff']) %}
+      .pakket-7 { --bubble-sub-button-background-color: {{ kleur[0] }}; color: {{ kleur[1] }}; }
+      ${(() => {
+        const pakket = hass.states['sensor.parcel_aggregator_inkomende_pakketten']?.attributes.parcels?.[6];
+        const url = pakket?.url || '';
+        card.dataset.url = url.includes('dhlecommerce')
+          ? 'https://my.dhlecommerce.nl/portal/tracktrace/' + pakket.barcode
+          : url;
+        if (!card.dataset.klik) {
+          card.dataset.klik = '1';
+          card.addEventListener('hass-action', (event) => {
+            if (card.dataset.url && event.detail?.action === 'tap') {
+              event.detail.config = { ...event.detail.config, tap_action: { action: 'url', url_path: card.dataset.url } };
+            }
+          }, true);
+        }
+        return '';
+      })()}
+
+  # ==================================================================
+  # PAKKET 8  (gelijk aan pakket 1, alleen het nummer verschilt)
+  # ==================================================================
+  - type: custom:bubble-card
+    card_type: sub-buttons
+    hide_main_background: true
+    rows: 0.75
+    visibility:
+      - condition: numeric_state
+        entity: sensor.parcel_aggregator_inkomende_pakketten
+        above: 7
+    sub_button:
+      bottom:
+        - group:
+            - entity: sensor.parcel_aggregator_inkomende_pakketten
+              icon: mdi:package-variant-closed
+              show_name: true
+              state_background: false
+              css_class: pakket-8
+              name: |-
+                {%- set pakketten = state_attr(entity, 'parcels') or [] -%}
+                {%- set pakket = pakketten[7] if pakketten | count > 7 else {} -%}
+                {%- set amazon = integration_entities('amazon_orders') | map('state_attr', 'parcels') | select | sum(start=[]) | selectattr('barcode', 'eq', pakket.get('barcode')) | list if pakket.get('barcode') else [] -%}
+                {%- set raw = (amazon[0].raw if amazon else none) or {} -%}
+                {%- set producten = raw.get('items') or [] -%}
+                {%- set afzender = pakket.get('sender') or (producten[0].split(',')[0] | truncate(28) if producten else none) or ('Amazon' if (pakket.get('barcode') or '').startswith('AMZN') else 'Pakket') -%}
+                {{ pakket.get('carrier') or 'Pakket' }} · {{ afzender }}
+              state_content: |-
+                {%- set pakketten = state_attr(entity, 'parcels') or [] -%}
+                {%- set pakket = pakketten[7] if pakketten | count > 7 else {} -%}
+                {%- set amazon = integration_entities('amazon_orders') | map('state_attr', 'parcels') | select | sum(start=[]) | selectattr('barcode', 'eq', pakket.get('barcode')) | list if pakket.get('barcode') else [] -%}
+                {%- set raw = (amazon[0].raw if amazon else none) or {} -%}
+                {%- set van = as_local(as_datetime(pakket.planned_from)) if pakket.get('planned_from') else none -%}
+                {%- set tot = as_local(as_datetime(pakket.planned_to)) if pakket.get('planned_to') else none -%}
+                {%- if van and tot -%}
+                  {{ van.strftime('%-d-%-m · %H:%M') }}–{{ tot.strftime('%H:%M') }}
+                {%- elif van -%}
+                  {{ van.strftime('%-d-%-m') if van.strftime('%H:%M') == '00:00' else van.strftime('%-d-%-m · %H:%M') }}
+                {%- else -%}
+                  {{ raw.get('order_status') or 'Nog geen tijd' }}
+                {%- endif -%}
+              tap_action:
+                action: more-info
+    styles: |
+      {%- set pakketten = state_attr('sensor.parcel_aggregator_inkomende_pakketten', 'parcels') or [] -%}
+      {%- set pakket = pakketten[7] if pakketten | count > 7 else {} -%}
+      {%- set kleuren = {
+        'PostNL': ['#FF6200', '#fff'],
+        'DHL': ['#FFCC00', '#D40511'],
+        'DPD': ['#DC0032', '#fff'],
+        'Dragonfly': ['#1E1B4B', '#fff'],
+        'Amazon': ['#232F3E', '#FF9900'],
+      } -%}
+      {%- set kleur = kleuren.get(pakket.get('carrier'), ['var(--primary-color)', '#fff']) %}
+      .pakket-8 { --bubble-sub-button-background-color: {{ kleur[0] }}; color: {{ kleur[1] }}; }
+      ${(() => {
+        const pakket = hass.states['sensor.parcel_aggregator_inkomende_pakketten']?.attributes.parcels?.[7];
+        const url = pakket?.url || '';
+        card.dataset.url = url.includes('dhlecommerce')
+          ? 'https://my.dhlecommerce.nl/portal/tracktrace/' + pakket.barcode
+          : url;
+        if (!card.dataset.klik) {
+          card.dataset.klik = '1';
+          card.addEventListener('hass-action', (event) => {
+            if (card.dataset.url && event.detail?.action === 'tap') {
+              event.detail.config = { ...event.detail.config, tap_action: { action: 'url', url_path: card.dataset.url } };
+            }
+          }, true);
+        }
+        return '';
+      })()}
+
+  # ==================================================================
+  # BRIEVEN VAN POSTNL
+  # ==================================================================
+  # Alleen voor PostNL met MyMail. Vervang de sensor door die van jou, of
+  # verwijder dit kaartje. Een sensor die niet bestaat laat het kaartje weg.
+  - type: custom:bubble-card
+    card_type: sub-buttons
+    hide_main_background: true
+    rows: 0.75
+    visibility:
+      - condition: numeric_state
+        entity: sensor.postnl_jouw_account_brieven
+        above: 0
+    sub_button:
+      bottom:
+        - group:
+            - entity: sensor.postnl_jouw_account_brieven
+              name: "Brieven · {{ states(entity) }}"
+              state_content: "{{ (state_attr(entity, 'letters') or []) | map(attribute='title') | join(', ') }}"
+              icon: mdi:email
+              show_name: true
+              state_background: false
+              css_class: brief
+              tap_action:
+                action: none                    # een brief heeft geen trackpagina
+    styles: |
+      .brief { --bubble-sub-button-background-color: #FF6200; color: #fff; }
