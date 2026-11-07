@@ -1,8 +1,8 @@
 # Home Assistant automations
 
 Automations that let appliances follow the electricity price and use the solar
-left over, plus one that keeps an eye on the batteries in my sensors. Each one
-is a separate YAML file.
+left over, plus two that keep an eye on the batteries in my sensors and on
+topping up the rainwater tank. Each one is a separate YAML file.
 
 ## Files
 
@@ -13,6 +13,7 @@ is a separate YAML file.
 | [`boiler_verhogen_zonoverschot.yaml`](boiler_verhogen_zonoverschot.yaml) | Raises the hot water setpoint on the Ecoforest heat pump when there is really solar left over |
 | [`warmtepomp_koeling_uit_bij_hoge_stroomprijs.yaml`](warmtepomp_koeling_uit_bij_hoge_stroomprijs.yaml) | Turns the Ecoforest heat pump off above EUR 0.50 per kWh when warm weather is forecast |
 | [`notificatie_batterij_sensoren_leeg.yaml`](notificatie_batterij_sensoren_leeg.yaml) | Sends a notification when a sensor battery drops below 20 percent, and a reminder every morning at 09:00 until it is replaced |
+| [`waterput_bijvullen_bewaking.yaml`](waterput_bijvullen_bewaking.yaml) | Watches topping up the rainwater tank with tap water. Closes the valve when a stuck float lets the level pass the maximum, and sends a notification when topping up runs for 4 hours, no water flows, the valve leaks, or the flow meter valve blocks the line |
 
 ## Hardware
 
@@ -23,6 +24,11 @@ What I run. Other models from the same brands work, with different entity IDs.
   an Eplucon Th-touch
 - **Siemens** dishwasher on Home Connect
 - **HomeWizard P1** meter, for grid import and export
+- **Shelly Wave 2PM** on the rainwater tank: the float switches the tap water
+  valve on its own, the automation only watches it. It also needs the tank level
+  in percent. Set the 35 percent limit, which appears twice, to the level where
+  your float stops topping up plus about 10 percent
+- **Sonoff SWV** water valve in the top-up line, used as a flow meter
 
 ## Battery charging/discharging logic
 

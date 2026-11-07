@@ -1,0 +1,180 @@
+alias: Waterput bijvullen bewaking
+description: |-
+  Versie 20261107 · https://github.com/christianvaes/home-assistant
+
+  Bewaakt het bijvullen van de regenwaterput met kraanwater. De vlotter stuurt het bijvullen zelf via de Shelly; deze automation doet normaal niets.
+
+  Ondervangt:
+  - Vlotter vast: put boven 35% terwijl bijvullen aan staat. Zet bijvullen uit en meldt het, het enige moment dat Home Assistant schakelt.
+  - Te lang: bijvullen staat 4 uur aan. Melding.
+  - Geen water: 5 minuten bijvullen zonder flow. Melding.
+  - Ventiel lekt: flow terwijl bijvullen uit staat. Melding.
+  - SWV verkeerd: klep dicht of auto close aan. Melding.
+variables:
+  melding: notify.samsung_galaxy_s26_christian # waar de meldingen heen gaan
+triggers:
+  - alias: Putniveau komt boven het maximum
+    trigger: numeric_state
+    entity_id: sensor.waterput_percentage
+    above: 35 # afslagpunt van de vlotter (hier uiterlijk 26%) plus ongeveer 10%
+    for: "00:02:00"
+    id: vlotter_vast
+
+  - alias: Bijvullen 2 minuten aan
+    trigger: state
+    entity_id: switch.waterput_kranen_waterput_bijvullen # bijvulventiel
+    to: "on"
+    for: "00:02:00"
+    id: vlotter_vast
+    note: Vangt een vlotter die vastloopt terwijl de put al boven het maximum staat.
+
+  - alias: Bijvullen 4 uur aan
+    trigger: state
+    entity_id: switch.waterput_kranen_waterput_bijvullen
+    to: "on"
+    for: "04:00:00" # tijdens beregenen duurt bijvullen hier tot ongeveer 3 uur
+    id: te_lang
+
+  - alias: Bijvullen 5 minuten aan
+    trigger: state
+    entity_id: switch.waterput_kranen_waterput_bijvullen
+    to: "on"
+    for: "00:05:00"
+    id: geen_water
+
+  - alias: Er stroomt water
+    trigger: numeric_state
+    entity_id: sensor.buitenkraan_flow # flow van de SWV in L/min
+    above: 0.5 # de SWV meet in stappen van 1,67 L/min, dus dit is: er stroomt iets
+    for: "00:02:00"
+    id: lekt
+
+  - alias: Bijvullen 2 minuten uit
+    trigger: state
+    entity_id: switch.waterput_kranen_waterput_bijvullen
+    to: "off"
+    for: "00:02:00"
+    id: lekt
+    note: Vangt een ventiel dat na het bijvullen open blijft.
+
+  - alias: SWV klep dicht
+    trigger: state
+    entity_id: switch.buitenkraan # klep van de SWV
+    to: "off"
+    id: swv_klep
+
+  - alias: SWV auto close bij geen water aan
+    trigger: state
+    entity_id: switch.buitenkraan_auto_close_when_water_shortage
+    to: "on"
+    id: swv_auto_close
+    note: Een reset van de SWV zet dit weer aan.
+
+actions:
+  - choose:
+      - alias: Vlotter hangt vast
+        conditions:
+          - condition: trigger
+            id: vlotter_vast
+          - alias: Bijvullen staat aan
+            condition: switch.is_on
+            target:
+              entity_id: switch.waterput_kranen_waterput_bijvullen
+          - alias: Put boven het maximum
+            condition: numeric_state
+            entity_id: sensor.waterput_percentage
+            above: 35
+        sequence:
+          - alias: Bijvullen uitzetten
+            action: switch.turn_off
+            target:
+              entity_id: switch.waterput_kranen_waterput_bijvullen
+            note: De Shelly volgt de vlotter daarna pas weer als die van stand wisselt.
+          - alias: Melden dat de vlotter vast lijkt te hangen
+            action: notify.send_message
+            target:
+              entity_id: "{{ melding }}"
+            data:
+              title: Waterput bijvullen gestopt
+              message: >-
+                Vlotter lijkt vast, bijvullen gestopt bij {{ states('sensor.waterput_percentage') | int('?') }}%.
+                Controleer de vlotter; bijvullen gaat pas weer vanzelf aan als hij van stand wisselt.
+
+      - alias: Bijvullen duurt te lang
+        conditions:
+          - condition: trigger
+            id: te_lang
+        sequence:
+          - alias: Melden dat het bijvullen lang duurt
+            action: notify.send_message
+            target:
+              entity_id: "{{ melding }}"
+            data:
+              title: Waterput bijvullen duurt lang
+              message: >-
+                Bijvullen staat al 4 uur aan, niveau {{ states('sensor.waterput_percentage') | int('?') }}%.
+                Bij beregenen kan dat kloppen.
+
+      - alias: Geen water bij bijvullen
+        conditions:
+          - condition: trigger
+            id: geen_water
+          - alias: Er stroomt geen water
+            condition: numeric_state
+            entity_id: sensor.buitenkraan_flow
+            below: 0.5
+            note: Een onbereikbare SWV telt niet als geen water.
+        sequence:
+          - alias: Melden dat er geen water stroomt
+            action: notify.send_message
+            target:
+              entity_id: "{{ melding }}"
+            data:
+              title: Waterput bijvullen zonder water
+              message: >-
+                Bijvullen staat aan, maar er stroomt geen water. Kraan dicht, ventiel defect of SWV dicht?
+                Niveau {{ states('sensor.waterput_percentage') | int('?') }}%.
+
+      - alias: Ventiel lekt
+        conditions:
+          - condition: trigger
+            id: lekt
+          - alias: Bijvullen staat al 2 minuten uit
+            condition: switch.is_off
+            target:
+              entity_id: switch.waterput_kranen_waterput_bijvullen
+            options:
+              for: "00:02:00"
+            note: Flow van vlak na het dichtgaan telt niet mee.
+          - alias: Er stroomt water
+            condition: numeric_state
+            entity_id: sensor.buitenkraan_flow
+            above: 0.5
+        sequence:
+          - alias: Melden dat het ventiel lekt
+            action: notify.send_message
+            target:
+              entity_id: "{{ melding }}"
+            data:
+              title: Waterput ventiel lekt
+              message: >-
+                Er stroomt {{ states('sensor.buitenkraan_flow') }} L/min terwijl bijvullen uit staat: magneetventiel lekt.
+
+      - alias: SWV staat verkeerd
+        conditions:
+          - condition: trigger
+            id:
+              - swv_klep
+              - swv_auto_close
+        sequence:
+          - alias: Melden wat er verkeerd staat
+            action: notify.send_message
+            target:
+              entity_id: "{{ melding }}"
+            data:
+              title: Waterput bijvullen geblokkeerd
+              message: >-
+                {{ 'De klep van de SWV staat dicht.' if trigger.id == 'swv_klep'
+                   else 'Auto close bij geen water staat aan op de SWV.' }}
+                Zo kan de put niet bijvullen. Klep aan, auto close uit.
+mode: queued
