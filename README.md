@@ -10,5 +10,5 @@ to make the energy bill as low as possible.
 
 | folder | what is in it |
 |---|---|
-| [`automations/`](automations/) | Automations for the home battery, dishwasher, hot water and heat pump |
+| [`automations/`](automations/) | Automations for the home battery, dishwasher, hot water and heat pump, and a reminder for empty sensor batteries |
 | [`cards/`](cards/) | Dashboard cards, such as a pop-up with every parcel on its way |

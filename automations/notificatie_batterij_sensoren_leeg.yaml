@@ -1,0 +1,68 @@
+alias: Notificatie batterij sensoren leeg
+description: |-
+  Versie 20261107 · https://github.com/christianvaes/home-assistant
+
+  Meldt meteen als een batterij met het label Batterij melding onder 20% zakt, en herinnert elke ochtend zolang er nog een bijna leeg of onbereikbaar is.
+variables:
+  # komt achter de apparaatnaam in de melding, bijvoorbeeld welke kant je moet opladen
+  notities:
+    sensor.overloop_plissegordijn_bovenkant_batterij: links
+    sensor.overloop_plissegordijn_onderkant_batterij: rechts
+triggers:
+  - alias: Batterijpercentage zakt onder 20%
+    trigger: battery.level_crossed_threshold
+    target:
+      label_id: batterij_melding
+    options:
+      threshold:
+        type: below
+        value:
+          number: 20
+    id: direct
+    note: Het label is de lijst. Zet het op de batterij-entiteit in procenten, niet op het apparaat en niet op een binary sensor voor batterij laag.
+  - alias: Elke ochtend herinneren
+    trigger: time
+    at: "09:00:00"
+    id: dagelijks
+    note: Een vaste tijd overleeft een herstart van Home Assistant, een wachttijd van 24 uur niet.
+conditions: []
+actions:
+  - alias: Meteen melden, of elke ochtend herinneren wat nog leeg is
+    if:
+      - condition: trigger
+        id: direct
+    then:
+      - alias: Meld welke batterij net onder 20% zakte
+        action: notify.send_message
+        target:
+          entity_id: notify.gezin
+        data:
+          title: Batterij
+          message: "Bijna leeg: {{ device_name(trigger.entity_id) }}{{ ' (' ~ notities[trigger.entity_id] ~ ')' if trigger.entity_id in notities }} {{ trigger.to_state.state | int }}%"
+    else:
+      - alias: Zoek de batterijen die nog leeg of onbereikbaar zijn
+        variables:
+          leeg: >
+            {%- set lijst = namespace(namen=[]) -%}
+            {%- for e in label_entities('batterij_melding') -%}
+              {%- set naam = (device_name(e) or e) ~ (' (' ~ notities[e] ~ ')' if e in notities else '') -%}
+              {%- set waarde = states(e) -%}
+              {%- if waarde == 'unavailable' -%}
+                {%- set lijst.namen = lijst.namen + [naam ~ ' onbereikbaar'] -%}
+              {%- elif waarde | float(100) < 20 -%}
+                {%- set lijst.namen = lijst.namen + [naam ~ ' ' ~ waarde | int ~ '%'] -%}
+              {%- endif -%}
+            {%- endfor -%}
+            {{ lijst.namen }}
+        note: Onbereikbaar telt mee, want een batterij die helemaal op is laat de sensor vaak wegvallen. Unknown niet, dat zie je vooral vlak na een herstart.
+      - alias: Alleen sturen als er iets leeg is
+        condition: template
+        value_template: "{{ leeg | count > 0 }}"
+      - alias: Herinner aan alles wat nog leeg is
+        action: notify.send_message
+        target:
+          entity_id: notify.gezin
+        data:
+          title: Batterij
+          message: "Nog steeds bijna leeg: {{ leeg | join(', ') }}"
+mode: queued

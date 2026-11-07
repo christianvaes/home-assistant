@@ -1,7 +1,8 @@
 # Home Assistant automations
 
 Automations that let appliances follow the electricity price and use the solar
-left over. Each one is a separate YAML file.
+left over, plus one that keeps an eye on the batteries in my sensors. Each one
+is a separate YAML file.
 
 ## Files
 
@@ -11,6 +12,7 @@ left over. Each one is a separate YAML file.
 | [`vaatwasser_starten_op_de_goedkoopste_prijs.yaml`](vaatwasser_starten_op_de_goedkoopste_prijs.yaml) | Starts auto 2 on the Siemens dishwasher, delayed until the cheapest window, or earlier when solar is being exported |
 | [`boiler_verhogen_zonoverschot.yaml`](boiler_verhogen_zonoverschot.yaml) | Raises the hot water setpoint on the Ecoforest heat pump when there is really solar left over |
 | [`warmtepomp_koeling_uit_bij_hoge_stroomprijs.yaml`](warmtepomp_koeling_uit_bij_hoge_stroomprijs.yaml) | Turns the Ecoforest heat pump off above EUR 0.50 per kWh when warm weather is forecast |
+| [`notificatie_batterij_sensoren_leeg.yaml`](notificatie_batterij_sensoren_leeg.yaml) | Sends a notification when a sensor battery drops below 20 percent, and a reminder every morning at 09:00 until it is replaced |
 
 ## Hardware
 
@@ -117,6 +119,7 @@ Not every automation needs everything.
 | [`vaatwasser_starten_op_de_goedkoopste_prijs.yaml`](vaatwasser_starten_op_de_goedkoopste_prijs.yaml) | Home Connect, Nordpool, and the P1 meter |
 | [`boiler_verhogen_zonoverschot.yaml`](boiler_verhogen_zonoverschot.yaml) | Tech Controllers, zenSDK package, the P1 meter, and a power meter on the heat pump circuit |
 | [`warmtepomp_koeling_uit_bij_hoge_stroomprijs.yaml`](warmtepomp_koeling_uit_bij_hoge_stroomprijs.yaml) | Tech Controllers, Nordpool, and a sensor with today's forecast high, from any weather integration |
+| [`notificatie_batterij_sensoren_leeg.yaml`](notificatie_batterij_sensoren_leeg.yaml) | a label on the battery percentage sensors to watch, with the label ID `batterij_melding` (name it Batterij melding and Home Assistant gives it that ID), and a notify entity for the messages (mine is `notify.gezin`). The `notities` at the top are optional: text in brackets after a device name, mine say which side of a blind to charge. Replace them with your own sensors or leave them empty with `notities: {}` |
 
 | integration | provides |
 |---|---|
