@@ -1,29 +1,32 @@
 alias: Accu dagplan en bijplan
 description: |-
-  Versie 20261022 · https://github.com/christianvaes/home-assistant
+  Versie 20261108 · https://github.com/christianvaes/home-assistant
 
-  Vult de accu zo veel mogelijk met eigen zonnestroom, en koopt alleen uit het net bij wat de zon niet gaat brengen, op de goedkoopste momenten. Staat een van de uitgesloten apparaten aan, zoals een autolader, dan ontlaadt de accu helemaal niet, ook niet voor het huis.
+  Vult de accu zo veel mogelijk met eigen zonnestroom en zet hem in op de duurste kwartieren.
 
-  HOE, elk uur en bij zonsondergang:
-  - Hij kijkt hoeveel er nog in de accu past en hoeveel zonnestroom Solcast nog verwacht. Het verschil moet uit het net komen.
-  - Dat koopt hij in de goedkoopste kwartieren van vandaag, zolang ze na het laadverlies nog onder het daggemiddelde liggen. Duurder laden kost meer dan het oplevert.
-  - 's Nachts rekent hij alsof de accu bij zonsopgang leeg is, zodat hij geen goedkoop nachtkwartier mist. Te veel kan niet, de accu stopt op 100 procent.
-  - 's Avonds vergelijkt hij de kwartieren die vandaag nog komen met die van morgen, en koopt vanavond alleen wat goedkoper is dan morgen.
+  Nodig: het Zendure zenSDK-package van Gielz1986, Nordpool (HACS) en Solcast. Heten jouw entiteiten anders, vervang dan de namen in dit bestand.
 
-  MODUS, elk kwartier; de eerste regel die klopt telt. Kolommen: zon over | prijs | accu | wat er gebeurt | modus
-  1. maakt niet uit | laadkwartier van het plan | maakt niet uit | de accu laadt uit het net en je huis koopt zelf in | Dynamisch NOM
-  2. uitgesloten apparaat aan | maakt niet uit | maakt niet uit | huis en apparaat kopen uit het net, de accu ontlaadt helemaal niet en laadt wel op zonoverschot en in de laadkwartieren | Alleen slim opladen
-  3. nee | niet een van de duurste kwartieren die hij nog kan dekken | te krap tot de volgende keer bijladen, en de zon vult hem niet | je huis koopt in en de accu wacht op de duurdere kwartieren die nog komen | Alleen slim opladen
-  4. maakt niet uit | maakt niet uit | de zon vult hem | de accu dekt je huis en loopt vol op zon | Nul op de meter
-  5. maakt niet uit | maakt niet uit | genoeg tot de volgende keer bijladen, of een van de duurste kwartieren | de accu levert aan je huis, ook 's nachts als het goedkoop is | Dynamisch NOM
+  HOE, elk uur het plan en elk kwartier de modus:
+  - Hij kijkt welke kwartieren er nog komen, vandaag en morgen zodra die prijzen er zijn (rond 13 uur), en hoeveel zon Solcast per kwartier verwacht.
+  - De accu dekt de duurste kwartieren: met wat erin zit, met zon, en met stroom uit het net als die na het laadverlies goedkoper is dan het kwartier dat hij dekt. Levert een later kwartier meer op, dan schuift de stroom daarheen.
+  - Dat loopt tot het moment dat de zon de accu vult: netstroom van daarvoor dekt alleen kwartieren daarvoor, daarna zit hij toch vol met zon. Bij weinig zon kijkt hij tot het eind van de bekende prijzen vooruit.
+  - Vult de zon de accu vandaag toch, dan laadt hij alleen in de goedkoopste zonnige kwartieren; in de andere gaat de zon het net in, daar levert terugleveren meer op.
+  - In zonnige kwartieren laadt hij samen hooguit zoveel uit het net als de zon naar verwachting niet vult.
+  - Bij een negatieve prijs laadt hij altijd, zolang er ruimte is.
+
+  MODUS, elk kwartier; de eerste regel die klopt telt. Kolommen: situatie | wat er gebeurt | modus
+  1. laadkwartier van het plan, tenzij een uitgesloten apparaat aan staat en de accu vol is | de accu laadt uit het net en je huis koopt zelf in | Dynamisch NOM
+  2. uitgesloten apparaat aan | huis en apparaat kopen uit het net, de accu ontlaadt niet en laadt wel op zonoverschot | Alleen slim opladen
+  3. de zon vult de accu vandaag toch, en er komen nog goedkopere zonnige kwartieren om dat te doen | de zon gaat het net in, de accu wacht op die kwartieren | Alleen slim ontladen
+  4. dit kwartier is niet gedekt, en er komen nog gedekte kwartieren | je huis koopt in, de accu wacht op de duurdere kwartieren | Alleen slim opladen
+  5. de zon vult hem zonder het net | de accu dekt je huis en loopt vol op zon | Nul op de meter
+  6. anders | de accu levert aan je huis | Dynamisch NOM
   Buiten de laadkwartieren doen Nul op de meter en Dynamisch NOM hetzelfde; het verschil laat alleen zien of de zon de accu vult.
 
-  BEGRIPPEN:
-  - zon vult hem | Solcast verwacht, met de marge, genoeg zonoverschot om de accu te vullen; 's avonds telt de zon van morgen | er hoeft niets uit het net bij
-  - bijladen op net | dit kwartier is door het package aangewezen om de accu uit het net te laden
-  - volgende keer bijladen | uit het net: minstens een uur laadkwartieren achter elkaar, een los laadkwartier telt niet | komt dat niet, dan door de zon: het eerste halfuur waarin Solcast, met de marge, meer zon verwacht dan het huis trekt, als de zon daarna minstens zoveel in de accu brengt als een uur bijladen
-  - accu te krap | wat er nu in de accu zit is minder dan het huis nodig heeft tot de volgende keer bijladen | gerekend met het huisverbruik hieronder | de kwartieren die hij wel kan dekken zijn de duurste tot dan
-  - uitgesloten apparaat | zolang het aan staat ontlaadt de accu niet, ook niet voor het huis | aan zodra zijn vermogenssensor boven de drempel staat | geen sensoren ingevuld is uit
+  BEGRIPPEN. Kolommen: begrip | betekenis | gevolg
+  - gedekt | een kwartier waarin de accu je huis levert: uit wat erin zit, uit zon, of uit netladen dat goedkoper is | de accu bewaart zijn stroom daarvoor
+  - laadkwartier | een kwartier waarin het package uit het net laadt: de goedkoopste van de dag, tot en met het duurste dat de dekking kiest | hij schrijft het aantal in Goedkoopste X Periode
+  - uitgesloten apparaat | een apparaat waarbij de accu niet ontlaadt, ook niet voor het huis, zoals een autolader | optioneel: telt als aan boven de drempel; zonder sensoren staat dit uit
 
 trigger_variables:
   # ---- optioneel: apparaten waarbij de accu helemaal niet mag ontladen zolang ze aan staan, zoals een autolader ----
@@ -36,21 +39,21 @@ triggers:
     hours: /1
     minutes: 5
     id: dag
-    note: Op :05 zodat het niet botst met de modustak.
+    note: Op :05, los van de modusronde op het hele kwartier.
 
   - alias: Bij zonsondergang meteen de avondronde
     trigger: sun
     event: sunset
     offset: "00:01:00"
     id: avond
-    note: Anders zit er tot een uur tussen zonsondergang en de eerste avondronde, en in dat gat zou het dagplan nog avondkwartieren kunnen kopen. De minuut is marge zodat next_setting zeker al naar morgen wijst.
+    note: Vanaf zonsondergang telt de zon van morgen. Zo staat het plan daar meteen op, niet pas bij de volgende ronde. De minuut is marge zodat next_setting zeker al naar morgen wijst.
 
   - alias: Modus tegen de actuele prijs houden
     trigger: time_pattern
     minutes: /15
     seconds: 3
     id: modus
-    note: Zo vaak verandert de prijs. Drie seconden na het kwartier, zodat de prijs, de laadkwartieren en om middernacht het plan van de nieuwe dag al zijn bijgewerkt, en tussen de runs van het package door, dat elke vijf seconden draait. Valt een wissel van stand samen met zo'n run, dan kan het package nog een ontlaadopdracht sturen die in Alleen slim opladen blijft staan.
+    note: Zo vaak verandert de prijs. Drie seconden na het kwartier, zodat de prijs, de laadkwartieren en om middernacht het plan van de nieuwe dag al zijn bijgewerkt, en tussen de runs van het package door, dat elke vijf seconden draait. Valt een wissel toch samen met zo'n run, dan kan de accu in Alleen slim opladen blijven ontladen tot de volgende wissel van modus.
 
   - alias: Modus direct omzetten als een uitgesloten apparaat aangaat
     trigger: template
@@ -70,15 +73,17 @@ triggers:
 conditions:
   - alias: Alleen als de accu bereikbaar is
     condition: template
-    value_template: "{{ states('sensor.zendure_2400_ac_laadpercentage') | is_number }}"   # het laadpercentage komt van de accu zelf; is het onbekend, dan is de verbinding even weg en kan hij de accu toch niet aansturen. Plan en modus blijven dan staan, de volgende ronde rekent hij gewoon weer
+    value_template: >-              # het laadpercentage komt van de accu zelf; is het onbekend, dan is de verbinding even weg en kan hij de accu toch niet aansturen. Een capaciteit van 0 betekent hetzelfde: een accu van 0 kWh bestaat niet. Plan en modus blijven dan staan, de volgende ronde rekent hij gewoon weer
+      {{ states('sensor.zendure_2400_ac_laadpercentage') | is_number
+         and states('sensor.zendure_2400_ac_totale_capaciteit') | float(0) > 0 }}
 
 variables:
   # ---- aan te passen aan jouw situatie ----
-  rendement: 0.87                   # round trip, iets onder de bij mij gemeten 87,6 procent; het package heeft er een sensor voor
-  zon_naar_accu_deel: 0.55          # deel van de zonnestroom dat het huis overdag niet zelf gebruikt en naar de accu gaat; bij mij 55 procent, teruglevering gedeeld door opwek
+  rendement: 0.87                   # round trip, iets onder de bij mij gemeten 87,9 procent; het package heeft er een sensor voor (batterij RTE)
+  zon_naar_accu_deel: 0.55          # deel van de zonnestroom dat het huis overdag niet zelf gebruikt en naar de accu gaat; zonder accu is dat je teruglevering gedeeld door je opwek. Bij mij 0,55
   zon_basislast: 1.5                # kWh zonnestroom per dag die het huis eerst zelf opmaakt, pas daarna gaat er iets naar de accu; bij mij 1,5
   zon_zekerheid: 0.8                # veiligheidsmarge: reken met 80 procent van de Solcast-prognose, want die valt vaker tegen dan mee; lager is meer marge en koopt vaker zon in die je gratis had gehad
-  huisverbruik: 0.55                # kW die het huis gemiddeld trekt als de zon niets levert; bij mij 0,55, wat de accu 's nachts per uur levert; in de winter hoger door de warmtepomp
+  huisverbruik: 0.7                 # kW die het huis gemiddeld trekt als de zon niets levert: je gemiddelde afname 's avonds en 's nachts. Bij mij 0,7 ('s nachts 0,55, 's avonds 1 tot 1,8), gekozen met een jaar metingen; tussen 0,65 en 0,75 maakt weinig uit
 
   # ---- waarden uit het Zendure zenSDK-package van Gielz1986, met mijn waarden als terugval als een sensor wegvalt ----
   accu_inhoud: >-                   # totale inhoud van de accu in kWh
@@ -94,21 +99,19 @@ variables:
   # ---- waar in de dag zitten we ----
   zon_onder: >-                     # de eerstvolgende zonsopgang komt eerder dan de eerstvolgende zonsondergang. Niet de status van sun.sun: die volgt de zonshoogte en loopt tot vier minuten achter op het moment van zonsondergang, terwijl de trigger en next_setting daar precies op zitten
     {{ (state_attr('sun.sun','next_rising') | as_datetime) < (state_attr('sun.sun','next_setting') | as_datetime) }}
-  avond: >-                         # van zonsondergang tot middernacht; dan plannen we de rest van vanavond en morgen samen. Na middernacht is het weer 'dag': dan gaat het om vandaag, ook al is de zon nog onder
+  avond: >-                         # van zonsondergang tot middernacht: dan telt de zon van morgen. Na middernacht is het weer 'dag': dan gaat het om vandaag, ook al is de zon nog onder
     {{ zon_onder and now().hour >= 12 }}
   uitgesloten_apparaat_aan: >-      # staat er nu een uitgesloten apparaat aan; een lege lijst of een weggevallen sensor telt als uit
     {{ expand(uitgesloten_apparaten) | map(attribute='state') | map('float', 0)
        | select('gt', uitgesloten_apparaten_vanaf_vermogen) | list | count > 0 }}
 
-  # ---- hoeveel er in de accu past op het moment dat de zon weer schijnt ----
+  # ---- de accu nu, en 'nodig': hoeveel kwartieren er uit het net bij moeten als je alleen naar de zon kijkt, niet naar de prijs. Dat is de grens voor netladen in zonnige kwartieren, en bij 0 vult de zon de accu ----
   soc: >-                           # hoe vol de accu nu is, in procenten. De terugval voorkomt alleen een foutmelding: is het percentage onbekend, dan stopt de voorwaarde bovenin de run
     {{ states('sensor.zendure_2400_ac_laadpercentage') | float(soc_minimum) }}
-  ruimte_in_accu: >-                # hoeveel kWh er nog in de accu bij kan. Overdag: de echte ruimte van nu. 's Nachts: de hele accu, alsof hij bij zonsopgang leeg is; zo mist hij nooit goedkope nachtkwartieren, en te veel kan niet want de accu stopt op 100 procent
+  ruimte_in_accu: >-                # hoeveel kWh er nog in de accu bij kan. Overdag: de echte ruimte van nu. 's Nachts: de hele accu, een ruime grens; welke nachtkwartieren hij echt koopt, bepaalt de dekking
     {{ accu_inhoud * (soc_maximum - soc_minimum) / 100
        if zon_onder
        else [ accu_inhoud * (soc_maximum - soc) / 100, 0 ] | max }}
-
-  # ---- hoeveel er dan nog uit het net bij moet ----
   zon: >-                           # Solcast-prognose in kWh met de marge erop: 's avonds die voor morgen, anders die voor de rest van vandaag
     {{ (states('sensor.solcast_pv_forecast_forecast_tomorrow') | float(0)
         if avond
@@ -121,13 +124,102 @@ variables:
   nodig: >-                         # aantal kwartieren laden uit het net, naar boven afgerond
     {{ (aan_te_vullen / laadvermogen_per_kwartier) | round(3) | round(0, 'ceil') | int }}
 
+  # ---- de dekking: welke dure kwartieren de accu dekt, en wanneer hij daarvoor uit het net laadt ----
+  prijzen_vooruit: >-               # de kwartieren die nog komen, vandaag en morgen zodra die prijzen er zijn (rond 13 uur): [[start, prijs], ...]
+    {% set ns = namespace(lijst=[]) %}
+    {% for q in (state_attr('sensor.dynamisch_nordpool','raw_today') or []) + (state_attr('sensor.dynamisch_nordpool','raw_tomorrow') or [])
+          if q.value is number and (q.end | as_datetime) > now() %}
+      {% set ns.lijst = ns.lijst + [[(q.start | as_datetime | as_local).isoformat(), q.value]] %}
+    {% endfor %}
+    {{ ns.lijst }}
+  zon_per_kwartier: >-              # de zon die Solcast per kwartier verwacht, met de marge, in kWh: {start: kWh}
+    {% set ns = namespace(zon={}) %}
+    {% for p in (state_attr('sensor.solcast_pv_forecast_forecast_today','detailedForecast') or [])
+              + (state_attr('sensor.solcast_pv_forecast_forecast_tomorrow','detailedForecast') or []) %}
+      {% set start = p.period_start | as_datetime | as_local %}
+      {% set kwh = p.pv_estimate * zon_zekerheid / 4 %}
+      {% set ns.zon = dict(ns.zon, **{start.isoformat(): kwh, (start + timedelta(minutes=15)).isoformat(): kwh}) %}
+    {% endfor %}
+    {{ ns.zon }}
+  dekking: >-                       # welke kwartieren de accu dekt, in welke hij uit het net laadt, en hoeveel zon er per kwartier in gaat: {"gedekt": [...], "laad": [...], "zon": {start: kWh}}
+    {% set hk = huisverbruik / 4 %}
+    {% set bruikbaar = accu_inhoud * (soc_maximum - soc_minimum) / 100 %}
+    {% set inhoud = [accu_inhoud * (soc - soc_minimum) / 100, 0] | max %}
+    {# de zon per dag: zonnig is een kwartier waarin de zon het huis dekt. Het zonoverschot van die dag (dezelfde som als 'zonoverschot') gaat de accu in, verdeeld over de zonnige kwartieren #}
+    {% set z = namespace(zonnig=[], per_dag={}, zonnig_per_dag={}) %}
+    {% for st, prijs in prijzen_vooruit %}
+      {% set kwh = zon_per_kwartier.get(st, 0) %}
+      {% set z.per_dag = dict(z.per_dag, **{st[:10]: z.per_dag.get(st[:10], 0) + kwh}) %}
+      {% if kwh > hk %}
+        {% set z.zonnig = z.zonnig + [st] %}
+        {% set z.zonnig_per_dag = dict(z.zonnig_per_dag, **{st[:10]: z.zonnig_per_dag.get(st[:10], 0) + kwh}) %}
+      {% endif %}
+    {% endfor %}
+    {% set zon_in = namespace(kwh={}) %}
+    {% for st in z.zonnig %}
+      {% set overschot_dag = [zon_naar_accu_deel * z.per_dag[st[:10]] - zon_basislast, 0] | max %}
+      {% set zon_in.kwh = dict(zon_in.kwh, **{st: overschot_dag * zon_per_kwartier[st] / z.zonnig_per_dag[st[:10]]}) %}
+    {% endfor %}
+    {# het venster loopt tot de zon de accu vol krijgt: netstroom van daarvoor dekt alleen kwartieren daarvoor #}
+    {% set v = namespace(inhoud=inhoud, einde=prijzen_vooruit | count) %}
+    {% for st, prijs in prijzen_vooruit if v.einde == prijzen_vooruit | count %}
+      {% set v.inhoud = [v.inhoud + zon_in.kwh.get(st, 0) - (0 if st in z.zonnig else hk), 0] | max %}
+      {% if v.inhoud >= bruikbaar - 0.000001 and zon_in.kwh.get(st, 0) > 0 %}{% set v.einde = loop.index0 %}{% endif %}
+    {% endfor %}
+    {% set venster = prijzen_vooruit[:v.einde] %}
+    {# uit het net laden in een zonnig kwartier mag, maar samen nooit meer dan 'nodig': de goedkoopste eerst #}
+    {% set p = namespace(over=nodig * laadvermogen_per_kwartier, net={}) %}
+    {% for st, prijs in venster | sort(attribute=1) if st in z.zonnig %}
+      {% set p.net = dict(p.net, **{st: [laadvermogen_per_kwartier, p.over] | min}) %}
+      {% set p.over = [p.over - laadvermogen_per_kwartier, 0] | max %}
+    {% endfor %}
+    {# Op tijdsvolgorde, in stapjes van een kwartier huisverbruik, afgerond op hele stapjes. 'stroom' is wat er dan al beschikbaar is, met zijn kostprijs: wat in de accu zit en zon kosten niets, laden uit het net kost de prijs gedeeld door het rendement. Een kwartier zonder zon pakt het goedkoopste stapje als dat goedkoper is dan het kwartier zelf. Een later, duurder kwartier mag dat stapje nog overnemen; het eerdere kwartier koopt dan zelf in. Zo gaat elke kWh naar het duurste kwartier dat hij kan halen. Elk item in 'stroom' is [kostprijs, volgnummer, bron, aantal stapjes]; de bron is 'accu', 'zon', 'net <kwartier waarin hij laadt>' of 'kwartier <eerder gedekt kwartier>' (stroom die een later kwartier kan overnemen) #}
+    {% set d = namespace(stroom=[], volg=1, gedekt=[]) %}
+    {% if (inhoud / hk + 0.000001) | round | int > 0 %}{% set d.stroom = [[0, 0, 'accu', (inhoud / hk + 0.000001) | round | int]] %}{% endif %}
+    {% for st, prijs in venster %}
+      {% if st not in z.zonnig and d.stroom %}
+        {% set goedkoopste = d.stroom | sort(attribute='0,1') | first %}
+        {% if goedkoopste[0] < prijs %}
+          {% set d.stroom = (d.stroom | rejectattr('1', 'eq', goedkoopste[1]) | list)
+                            + ([goedkoopste[:3] + [goedkoopste[3] - 1]] if goedkoopste[3] > 1 else []) %}
+          {% set bron = goedkoopste[2] %}
+          {% if bron.startswith('kwartier ') %}
+            {% set eerder = bron[9:] %}
+            {% set bron = (d.gedekt | selectattr('0', 'eq', eerder) | first)[1] %}
+            {% set d.gedekt = d.gedekt | rejectattr('0', 'eq', eerder) | list %}
+          {% endif %}
+          {% set d.gedekt = d.gedekt + [[st, bron]] %}
+          {% set d.stroom = d.stroom + [[prijs, d.volg, 'kwartier ' ~ st, 1]] %}
+          {% set d.volg = d.volg + 1 %}
+        {% endif %}
+      {% endif %}
+      {% set stapjes_zon = (zon_in.kwh.get(st, 0) / hk + 0.000001) | round | int %}
+      {% set net = laadvermogen_per_kwartier if st not in z.zonnig else p.net.get(st, 0) %}
+      {% set stapjes_net = (net / hk + 0.000001) | round | int %}
+      {% if stapjes_zon > 0 %}{% set d.stroom = d.stroom + [[0, d.volg, 'zon', stapjes_zon]] %}{% set d.volg = d.volg + 1 %}{% endif %}
+      {% if stapjes_net > 0 %}{% set d.stroom = d.stroom + [[prijs / rendement, d.volg, 'net ' ~ st, stapjes_net]] %}{% set d.volg = d.volg + 1 %}{% endif %}
+    {% endfor %}
+    {# de kwartieren waarin hij uit het net laadt, en hoeveel #}
+    {% set n = namespace(laad=[], kwh=0) %}
+    {% for st, bron in d.gedekt if bron.startswith('net ') %}
+      {% set n.kwh = n.kwh + hk %}
+      {% if bron[4:] not in n.laad %}{% set n.laad = n.laad + [bron[4:]] %}{% endif %}
+    {% endfor %}
+    {# bij een negatieve inkoopprijs krijg je geld toe: dan altijd laden zolang er ruimte is #}
+    {% for st, prijs in prijzen_vooruit | sort(attribute=1) if prijs < 0 and st not in n.laad
+                                                            and n.kwh + laadvermogen_per_kwartier <= bruikbaar - inhoud + 0.000001 %}
+      {% set n.laad = n.laad + [st] %}
+      {% set n.kwh = n.kwh + laadvermogen_per_kwartier %}
+    {% endfor %}
+    {{ {'gedekt': d.gedekt | map(attribute=0) | list, 'laad': n.laad, 'zon': zon_in.kwh} }}
+
 actions:
   - choose:
 
       # ==================================================================
-      # PLAN: hoeveel kwartieren uit het net, elk uur opnieuw bekeken
+      # PLAN: in welke kwartieren het package uit het net laadt, elk uur opnieuw bekeken
       # ==================================================================
-      - alias: Plan voor vandaag, en 's avonds ook voor morgen
+      - alias: Plan voor vandaag, en voor morgen zodra die prijzen er zijn
         conditions:
           - condition: trigger
             id:
@@ -135,23 +227,20 @@ actions:
               - avond
         sequence:
           - variables:
-              laadkwartieren: >-            # het getal voor het package: het aantal goedkoopste kwartieren van de dag, ook voorbije. Dus: de positie in de prijslijst tot en met het duurste kwartier dat we nog willen
-                {% set vandaag = state_attr('sensor.dynamisch_nordpool','raw_today') or [] %}
-                {% set morgen = (state_attr('sensor.dynamisch_nordpool','raw_tomorrow') or []) if avond else [] %}
-                {# het gemiddelde waar een kwartier onder moet liggen: van de dagen waar hij tegen afweegt. Overdag vandaag, 's avonds vandaag en morgen samen #}
-                {% set gemiddelde = (vandaag + morgen) | rejectattr('value','none') | map(attribute='value') | average if vandaag else 0 %}
-                {% set zonsondergang = state_attr('sun.sun','next_setting') | as_datetime %}
-                {# kandidaten van vandaag: nog niet voorbij, na het laadverlies nog onder het gemiddelde (duurder laden kost meer dan het oplevert), en niet na zonsondergang: die weegt de avondronde tegen morgen af. Na zonsondergang is next_setting die van morgen, dan doet dit niets meer #}
-                {% set ns = namespace(kandidaten=[]) %}
-                {% for q in vandaag if (q.end | as_datetime) > now() and q.value < gemiddelde * rendement and (q.start | as_datetime) < zonsondergang %}
-                  {% set ns.kandidaten = ns.kandidaten + [q.value] %}
+              laadgrens: >-                 # per dag de prijs van het duurste kwartier waarin hij uit het net laadt: {datum: prijs}
+                {% set prijs = dict(prijzen_vooruit) %}
+                {% set ns = namespace(grens={}) %}
+                {% for st in dekking.laad %}
+                  {% set ns.grens = dict(ns.grens, **{st[:10]: [ns.grens.get(st[:10], prijs[st]), prijs[st]] | max}) %}
                 {% endfor %}
-                {# 's avonds concurreren ze met heel morgen: van de 'nodig' goedkoopste van beide dagen samen houden we alleen die van vandaag over. Overdag is morgen leeg en zijn het gewoon de 'nodig' goedkoopste kandidaten #}
-                {% set goedkoopste = ((ns.kandidaten + (morgen | rejectattr('value','none') | map(attribute='value') | list)) | sort)[:nodig] %}
-                {% set gekozen = ns.kandidaten | select('in', goedkoopste) | list %}
-                {# de grens is de duurste die we willen; zijn er minder kandidaten dan nodig, dan stopt het daar en worden duurdere kwartieren niet gekocht omdat de goedkope op zijn #}
-                {% set grens = gekozen | max if gekozen else -999 %}
-                {{ vandaag | map(attribute='value') | select('le', grens) | list | count }}
+                {{ ns.grens }}
+              laadkwartieren: >-            # het getal voor het package: het aantal goedkoopste kwartieren van de dag, ook voorbije, tot en met het duurste laadkwartier van vandaag
+                {{ (state_attr('sensor.dynamisch_nordpool','raw_today') or []) | map(attribute='value')
+                   | select('le', laadgrens.get(now().date().isoformat(), -999)) | list | count }}
+              laadkwartieren_morgen: >-     # hetzelfde voor morgen; zonder prijzen voor morgen de schatting 'nodig'
+                {% set morgen = (state_attr('sensor.dynamisch_nordpool','raw_tomorrow') or []) | map(attribute='value') | list %}
+                {{ morgen | select('le', laadgrens.get((now() + timedelta(days=1)).date().isoformat(), -999)) | list | count
+                   if morgen else nodig }}
 
           - alias: Schrijf het aantal laadkwartieren voor vandaag
             action: input_number.set_value
@@ -161,23 +250,20 @@ actions:
               value: "{{ laadkwartieren }}"
             note: Ook verlagen en ook een 0, anders koop je in wat de zon gratis levert of blijft een oud getal staan.
 
-          - alias: Avond, ook het plan voor morgen
+          - alias: Schrijf het plan voor morgen
             if:
               - condition: template
-                value_template: "{{ avond }}"
+                value_template: "{{ avond or (state_attr('sensor.dynamisch_nordpool','raw_tomorrow') or []) | count > 0 }}"
             then:
               - action: input_number.set_value
                 target:
                   entity_id: input_number.dynamisch_goedkoopste_x_periode_morgen
                 data:
-                  value: >-
-                    {% set prijzen_morgen = (state_attr('sensor.dynamisch_nordpool','raw_tomorrow') or []) | rejectattr('value','none') | map(attribute='value') | list %}
-                    {% set lonende_kwartieren = prijzen_morgen | select('lt', (prijzen_morgen | average) * rendement) | list | count if prijzen_morgen else nodig %}
-                    {{ [ nodig, lonende_kwartieren ] | min }}
-                note: Zet voor morgen alleen de kwartieren klaar waarin laden loont. Zo weet de accu 's avonds al of hij vannacht kan laden, of dat hij moet sparen voor de ochtend.
+                  value: "{{ laadkwartieren_morgen }}"
+                note: Zodra de prijzen van morgen er zijn. Zo weet de accu al of hij vannacht kan laden, of dat hij moet sparen voor de ochtend.
 
       # ==================================================================
-      # MODUS: ontladen of inkopen, elk kwartier opnieuw bekeken
+      # MODUS: ontladen, sparen of de zon het net in laten, elk kwartier opnieuw bekeken
       # ==================================================================
       - alias: Modus tegen de actuele prijs houden
         conditions:
@@ -185,42 +271,36 @@ actions:
             id: modus
         sequence:
           - variables:
-              kwartieren_in_accu: >-        # hoeveel kwartieren het huis vooruit kan met wat er nu boven de bodem in de accu zit, gerekend met huisverbruik
-                {{ ([ accu_inhoud * (soc - soc_minimum) / 100, 0 ] | max / (huisverbruik / 4)) | int }}
-              spaar: >-                     # haalt de accu de volgende keer bijladen niet, en is dit kwartier niet een van de duurste tot dan
-                {% set vandaag = state_attr('sensor.dynamisch_goedkoopste_periode','raw_today') or [] %}
-                {% set morgen = state_attr('sensor.dynamisch_goedkoopste_periode','raw_tomorrow') or [] %}
-                {# bijladen door de zon: het eerste halfuur vanaf nu, het lopende halfuur meegerekend, waarin Solcast, met de marge, meer zon verwacht dan het huis trekt. Telt alleen als de zon daarna minstens zoveel in de accu brengt als een uur bijladen; zo maakt een zonnig halfuur in de winter geen eindpunt. Geen Solcast-gegevens: geen eindpunt door de zon #}
-                {% set zon_dekt_huis = namespace(vanaf=none) %}
-                {% if zonoverschot >= 4 * laadvermogen_per_kwartier %}
-                  {% set verwachting = (state_attr('sensor.solcast_pv_forecast_forecast_today','detailedForecast') or [])
-                                     + (state_attr('sensor.solcast_pv_forecast_forecast_tomorrow','detailedForecast') or []) %}
-                  {% for p in verwachting if zon_dekt_huis.vanaf is none
-                                          and (p.period_start | as_datetime) > now() - timedelta(minutes=30)
-                                          and p.pv_estimate * zon_zekerheid > huisverbruik %}
-                    {% set zon_dekt_huis.vanaf = p.period_start | as_datetime %}
-                  {% endfor %}
-                {% endif %}
-                {# het venster: de prijzen van de kwartieren van nu tot het eerstvolgende bijladen. Het package zet goedkoop 'ja' op elk laadkwartier van het plan; bijladen uit het net telt pas bij vier achter elkaar, een uur. Losse laadkwartieren tellen niet mee en komen ook niet in het venster, daarin laadt de accu. Daarnaast de kwartieren tot de zon het huis dekt, voor als er geen bijladen uit het net meer komt #}
-                {% set ns = namespace(venster=[], tot_zon=[], blok=0) %}
-                {% for q in vandaag + morgen if (q.end | as_datetime) > now() and ns.blok < 4 %}
-                  {% if q.goedkoop == 'ja' %}{% set ns.blok = ns.blok + 1 %}
-                  {% else %}
-                    {% set ns.blok = 0 %}{% set ns.venster = ns.venster + [q.value] %}
-                    {% if zon_dekt_huis.vanaf is none or (q.start | as_datetime) < zon_dekt_huis.vanaf %}{% set ns.tot_zon = ns.tot_zon + [q.value] %}{% endif %}
-                  {% endif %}
+              dit_kwartier: >-              # het kwartier van nu: het eerste dat nog niet voorbij is
+                {{ prijzen_vooruit[0][0] if prijzen_vooruit else '' }}
+              zon_later: >-                 # vult de zon de accu vandaag toch, en is dit niet een van de goedkoopste kwartieren om dat te doen: dan gaat de zon nu het net in
+                {% set prijs = dict(prijzen_vooruit) %}
+                {% set ruimte = ruimte_in_accu / rendement ** 0.5 %}
+                {# de zon die vandaag nog de accu in gaat volgens de dekking; ruimte is wat er nog bij kan, met de helft van het rondverlies (het laden) erbij #}
+                {% set k = namespace(zon=[], nog=ruimte, gekozen=[]) %}
+                {% for st, kwh in dekking.zon.items() if st[:10] == now().date().isoformat() %}
+                  {% set k.zon = k.zon + [[prijs[st], st, kwh]] %}
                 {% endfor %}
-                {# komt er bijladen uit het net, dan is dat het eindpunt; anders de zon #}
-                {% set venster = ns.venster if ns.blok >= 4 else ns.tot_zon %}
-                {# de grens: sorteer het venster van duur naar goedkoop en pak de prijs op positie kwartieren_in_accu, dat is het goedkoopste kwartier dat de accu nog kan dekken. Ligt de prijs van nu daaronder, dan hoort dit kwartier niet bij de duurste en spaart hij #}
-                {# een weggevallen prijs geeft 999: dan spaart hij niet #}
-                {{ kwartieren_in_accu < venster | count
-                   and states('sensor.dynamisch_nordpool') | float(999) < (venster | sort(reverse=true))[kwartieren_in_accu - 1] }}
-              gewenst: >-                   # de modus volgens de regels uit de beschrijving; nodig is 0 als de zon de accu vult
-                {{ 'Dynamisch NOM' if is_state('sensor.dynamisch_goedkoopste_periode','Ja')
-                   else 'Alleen slim opladen' if uitgesloten_apparaat_aan or (spaar and nodig > 0)
-                   else 'Nul op de meter' if nodig == 0
-                   else 'Dynamisch NOM' }}
+                {# de goedkoopste kwartieren die samen de accu vullen; elk kwartier hooguit het laadvermogen #}
+                {% for _, st, kwh in k.zon | sort(attribute='0,1') if k.nog > 0 %}
+                  {% set k.gekozen = k.gekozen + [st] %}
+                  {% set k.nog = k.nog - [kwh, laadvermogen_per_kwartier / rendement] | min %}
+                {% endfor %}
+                {{ dit_kwartier in dekking.zon and k.zon | map(attribute=2) | sum >= ruimte and dit_kwartier not in k.gekozen }}
+              gewenst: >-                   # de modus volgens de regels uit de beschrijving
+                {% if is_state('sensor.dynamisch_goedkoopste_periode','Ja') and not (uitgesloten_apparaat_aan and soc >= soc_maximum) %}
+                  Dynamisch NOM
+                {% elif uitgesloten_apparaat_aan %}
+                  Alleen slim opladen
+                {% elif zon_later %}
+                  Alleen slim ontladen
+                {% elif dit_kwartier not in dekking.gedekt and dekking.gedekt | count > 0 %}
+                  Alleen slim opladen
+                {% elif nodig == 0 %}
+                  Nul op de meter
+                {% else %}
+                  Dynamisch NOM
+                {% endif %}
 
           - alias: Zet de modus
             action: input_select.select_option
@@ -231,4 +311,4 @@ actions:
 
 mode: single
 trace:
-  stored_traces: 50
+  stored_traces: 150                # ruim een dag terug: per dag 96 modusrondes en 25 planrondes

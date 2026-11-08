@@ -8,7 +8,7 @@ topping up the rainwater tank. Each one is a separate YAML file.
 
 | file | what it does |
 |---|---|
-| [`accu_dagplan_en_bijplan.yaml`](accu_dagplan_en_bijplan.yaml) | Fills the Zendure battery with solar and buys the rest in the cheapest quarter-hours, planned on the solar forecast. Sets the battery mode |
+| [`accu_dagplan_en_bijplan.yaml`](accu_dagplan_en_bijplan.yaml) | Fills the Zendure battery with solar and uses it for the most expensive quarter-hours. Charges from the grid only when that is cheaper, even after the charging loss. Sets the battery mode |
 | [`vaatwasser_starten_op_de_goedkoopste_prijs.yaml`](vaatwasser_starten_op_de_goedkoopste_prijs.yaml) | Starts auto 2 on the Siemens dishwasher, delayed until the cheapest window, or earlier when solar is being exported |
 | [`boiler_verhogen_zonoverschot.yaml`](boiler_verhogen_zonoverschot.yaml) | Raises the hot water setpoint on the Ecoforest heat pump when there is really solar left over |
 | [`warmtepomp_koeling_uit_bij_hoge_stroomprijs.yaml`](warmtepomp_koeling_uit_bij_hoge_stroomprijs.yaml) | Turns the Ecoforest heat pump off above EUR 0.50 per kWh when warm weather is forecast |
@@ -32,88 +32,93 @@ What I run. Other models from the same brands work, with different entity IDs.
 
 ## Battery charging/discharging logic
 
-[`accu_dagplan_en_bijplan.yaml`](accu_dagplan_en_bijplan.yaml) makes two decisions: which mode
-the battery runs in, and how much it tops up from the grid.
+[`accu_dagplan_en_bijplan.yaml`](accu_dagplan_en_bijplan.yaml) uses as much of your own solar as
+it can, and buys the rest when power is cheap. It decides two things:
 
-### Choosing the mode
+- in which quarters the battery charges from the grid
+- every quarter-hour, which mode the battery runs in
 
-Every quarter-hour it picks a mode, based on the solar left over, the price, and whether the
-forecast fills the battery without the grid.
-
-| rule | solar left over | price | battery | what happens | mode |
-|---|---|---|---|---|---|
-| 1 | any | planned charging quarter | any | the battery charges from the grid, the house buys its own power | `Dynamisch NOM` |
-| 2 | excluded appliance running | any | any | the house buys from the grid, the battery does not discharge at all | `Alleen slim opladen` |
-| 3 | no | not among the most expensive quarters it can still cover | too little until the next charge, and the sun will not fill it | the house buys, and the battery waits for the more expensive quarters ahead | `Alleen slim opladen` |
-| 4 | any | any | the sun fills it | the battery supplies the house, solar surplus goes in | `Nul op de meter` |
-| 5 | any | any | enough until the next charge, or one of the most expensive quarters | the battery supplies the house, also at night when power is cheap | `Dynamisch NOM` |
-
-The mode names are Dutch, they come from the Gielz zenSDK package. Outside the
-charging quarters `Nul op de meter` and `Dynamisch NOM` behave the same; the
-difference only shows whether the sun fills the battery.
-
-Rule 3, every quarter: the automation works out how many quarters the house can
-still run on what is in the battery, using an average house load, and looks at
-the prices from now until the next charge, today and tomorrow together.
-
-- From the grid: a charging block of at least an hour of planned charging
-  quarters in a row. A single planned quarter adds only 4 percent and does not
-  count.
-- From the sun, if no charging block is coming: the first half hour in which
-  Solcast, with the margin, expects more solar than the house draws. This only
-  counts when the sun then puts at least an hour of charging into the battery,
-  so a single sunny half hour in winter does not count.
-
-If the battery cannot cover all quarters until then, it is kept for the most
-expensive ones and the house buys the rest from the grid. If it can, it just
-discharges.
-
-The excluded appliances are optional: a list of power sensors, for example a car
-charger, with one threshold above which an appliance counts as running. Leave
-the list empty and the row above never applies. Grid charging in the planned
-cheap quarters keeps working while an appliance runs, only discharging stops.
-
-### Topping up from the grid
-
-When the sun is not expected to fill the battery, the automation buys the rest in the cheapest
-quarters of the day. This is how it works out how much that is.
+### How much the sun fills
 
 ```mermaid
 flowchart TD
-    F["Solcast forecast<br>rest of today, or tomorrow after sunset"] -->|15 kWh| M["× zon_zekerheid<br>safety margin on the forecast<br><b>0.8</b>"]
-    M -->|12 kWh| S["× zon_naar_accu_deel<br>the share the house does not use itself<br><b>0.55</b>"]
-    S -->|6.6 kWh| B["− zon_basislast<br>what the house uses before anything is left<br><b>1.5 kWh</b>"]
-    B -->|5.1 kWh| E["Solar expected to reach the battery"]
-    C["Battery<br><b>13.92 kWh</b>, never used below <b>10%</b>"] --> D{"Is the sun down?"}
-    D -->|yes| R1["Room: the whole battery<br>as if it is empty at sunrise"]
-    D -->|no| R2["Room: what is really free right now"]
+    F["Solcast forecast<br>rest of today; from sunset to midnight: tomorrow"] -->|15 kWh| M["× zon_zekerheid<br>Solcast is often too high<br><b>0.8</b>"]
+    M -->|12 kWh| S["× zon_naar_accu_deel<br>the part the house does not use<br><b>0.55</b>"]
+    S -->|6.6 kWh| B["− zon_basislast<br>the house takes this first<br><b>1.5 kWh</b>"]
+    B -->|5.1 kWh| E["Solar that goes into the battery"]
+    C["Battery<br><b>13.92 kWh</b>, never below <b>10%</b>"] --> D{"Is the sun down?"}
+    D -->|yes| R1["Room: the whole battery<br>at night it counts as empty"]
+    D -->|no| R2["Room: what is empty now"]
     R1 -->|"13.92 × 90% = 12.5 kWh"| N
-    R2 -->|"13.92 × 80% = 11.1 kWh"| N
-    E -->|5.1 kWh| N["What is left to buy from the grid<br>the room minus the solar"]
-    N -->|6 kWh| Q["÷ laadvermogen_per_kwartier<br>what one quarter of charging adds<br><b>0.52 kWh</b> at 2400 W"]
-    Q -->|12| X["Number of cheapest quarters<br>handed to the package"]
+    R2 -->|"at 20%: 13.92 × 80% = 11.1 kWh"| N
+    E -->|5.1 kWh| N["Room the sun does not fill<br>room minus solar"]
+    N -->|6 kWh| Q["÷ laadvermogen_per_kwartier<br>one quarter of charging<br><b>0.52 kWh</b> at 2400 W"]
+    Q -->|12| X["Quarters the sun does not fill<br>0: the sun fills the battery<br>more: the most it may charge from the grid while the sun is up"]
+    X -->|"while the sun is up: 12 at most"| K["Price check<br>price ÷ rendement <b>0.87</b> must be lower<br>than the quarter the power is used in"]
+    K -->|"4 quarters at €0.20 for a morning at €0.40"| P["Number for the package: 4<br>the cheapest quarters of the day"]
 ```
 
 The settings in the boxes are mine. [Measured assumptions](#measured-assumptions) says where they
-come from. The values on the arrows follow the example at the end of this section.
+come from.
 
-The forecast covers the rest of today, not the whole day, so it shrinks as the day goes on.
-The package counts the cheapest quarters of the whole day, including ones already past, so the
-automation looks for the position in the price list where exactly the quarters it wants are
-still ahead. That is why the number it writes keeps growing during the day, even when the
-battery needs less than it did an hour earlier. A quarter only counts when its price, after
-the round-trip loss, is still below the day average: charging dearer than that costs more
-than it saves. During the day that is the average of today, after sunset the average of today
-and tomorrow together.
+**Example.** Solcast says 15 kWh, the battery is at 20 percent, the sun is up. After the margin
+12 kWh is left, and 0.55 × 12 − 1.5 = 5.1 kWh of that goes into the battery. At 20 percent
+11.1 kWh is empty, so the sun does not fill 11.1 − 5.1 = 6 kWh: 6 ÷ 0.52 = **12 quarters**. That
+is a limit, not a goal. The price check only buys quarters that are cheaper than the quarters the
+power is used in: 4 in the diagram. The house buys the rest at the moment itself, without
+charging loss.
 
-After sunset the quarters left today compete with all of tomorrow's. A quarter tonight is only
-bought when it is cheaper than what tomorrow offers. Without this the automation would buy the
-last quarters of the day just because the cheap ones were gone, not because they were cheap.
+### The price check: which quarters it charges in
 
-**A worked example.** A forecast of 15 kWh with the battery at 20 percent. The margin leaves
-12 kWh, of which 0.55 × 12 − 1.5 = 5.1 kWh is expected to reach the battery. The battery
-holds 13.92 kWh, so at 20 percent there is 11.1 kWh of room. That leaves 11.1 − 5.1 = 6 kWh
-to buy from the grid: 6 ÷ 0.52 = **12 quarters**.
+The battery is for the most expensive quarters. The automation walks through the coming quarters
+in time order, today and tomorrow once those prices are out (around 13:00). It counts in steps of
+one quarter of house use: `huisverbruik` 0.7 kW ÷ 4 = 0.175 kWh.
+
+- A quarter without sun gets the cheapest power there is: what is in the battery, solar, or grid
+  power from an earlier quarter at that price ÷ 0.87. Only if that is cheaper than the quarter
+  itself, otherwise the house buys.
+- A later, more expensive quarter may take that power away from an earlier one.
+- It looks ahead until the sun fills the battery, or to the end of the known prices. Grid power
+  charged before the sun fills it is only used before then, so in the morning there is room for
+  the sun.
+
+An example with one quarter of power in the battery:
+
+| quarter | price | what happens |
+|---|---|---|
+| A | €0.40 | gets the battery power |
+| B | €0.30 | cheaper than A: the power stays with A, B buys from the grid |
+| C | €0.50 | more expensive than A: takes the battery power, A now buys from the grid |
+
+Grid charging works the same way. A quarter at €0.20 offers power for 0.20 ÷ 0.87 = €0.23. A later
+quarter at €0.40 takes it, so €0.20 becomes a charging quarter; a quarter at €0.22 would not take
+it. The package wants one number per day: how many of the cheapest quarters it may charge in.
+When the price is negative it always charges, as long as there is room.
+
+### Choosing the mode
+
+Every quarter-hour it picks a mode; the first rule that applies wins.
+
+| rule | solar | price | battery | what happens | mode |
+|---|---|---|---|---|---|
+| 1 | any | one of the cheapest quarters of the day | any, unless full while an excluded appliance runs | the battery charges from the grid, the house buys its own power | `Dynamisch NOM` |
+| 2 | any | any | excluded appliance running | the house buys from the grid, the battery does not discharge but still charges on solar | `Alleen slim opladen` |
+| 3 | fills the battery today | cheaper sunny quarters later will fill it | any | solar goes to the grid, the battery waits for those quarters | `Alleen slim ontladen` |
+| 4 | any | not a covered quarter | kept for covered quarters ahead | the house buys from the grid | `Alleen slim opladen` |
+| 5 | fills the battery | any | any | the battery supplies the house, solar surplus goes in | `Nul op de meter` |
+| 6 | any | any | any | the battery supplies the house | `Dynamisch NOM` |
+
+The mode names are Dutch, they come from the Gielz zenSDK package. Outside the charging quarters
+`Nul op de meter` and `Dynamisch NOM` behave the same; the difference only shows whether the sun
+fills the battery.
+
+Rule 3: without net metering, solar fed in during the morning is worth more than solar stored
+then. So when the sun fills the battery anyway, it only takes solar in the cheapest quarters,
+usually around noon.
+
+The excluded appliances are optional: a list of power sensors, for example a car charger, with
+one threshold above which an appliance counts as running. Leave the list empty and rule 2 never
+applies. Grid charging keeps working while an appliance runs, unless the battery is full.
 
 ## Dependencies
 
@@ -147,9 +152,9 @@ installation.
 | `laadvermogen_per_kwartier` | 0.52 kWh | 2400 W charging power, times the round trip |
 | `zon_naar_accu_deel` | 0.55 | calibrated on 355 days of generation and feed-in |
 | `zon_basislast` | 1.5 kWh | same |
-| `rendement` | 0.87 | round trip, just below the measured 87.6 percent |
+| `rendement` | 0.87 | round trip, just below the measured 87.9 percent |
 | `zon_zekerheid` | 0.8 | Solcast ran 20 percent high on most days in September 2026; a bigger margin would buy solar you would have had for free |
-| `huisverbruik` | 0.55 kW | what the battery delivers per hour at night, measured on 15 September and 8 October 2026; higher in winter because of the heat pump |
+| `huisverbruik` | 0.7 kW | chosen with a year of measurements, November 2025 to October 2026: less at night (0.55), more in the evening (1 to 1.8). Anything between 0.65 and 0.75 gives almost the same result |
 
 [`boiler_verhogen_zonoverschot.yaml`](boiler_verhogen_zonoverschot.yaml) uses a threshold of 2400 W, based on the
 measured 2177 W draw during water heating.
