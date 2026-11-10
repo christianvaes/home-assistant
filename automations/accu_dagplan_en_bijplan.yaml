@@ -1,6 +1,6 @@
 alias: Accu dagplan en bijplan
 description: |-
-  Versie 20261108 · https://github.com/christianvaes/home-assistant
+  Versie 20261110 · https://github.com/christianvaes/home-assistant
 
   Vult de accu zo veel mogelijk met eigen zonnestroom en zet hem in op de duurste kwartieren.
 
@@ -15,7 +15,7 @@ description: |-
   - Bij een negatieve prijs laadt hij altijd, zolang er ruimte is.
 
   MODUS, elk kwartier; de eerste regel die klopt telt. Kolommen: situatie | wat er gebeurt | modus
-  1. laadkwartier van het plan, tenzij een uitgesloten apparaat aan staat en de accu vol is | de accu laadt uit het net en je huis koopt zelf in | Dynamisch NOM
+  1. laadkwartier van het plan, tenzij een uitgesloten apparaat aan staat en het package niet laadt | de accu laadt uit het net en je huis koopt zelf in | Dynamisch NOM
   2. uitgesloten apparaat aan | huis en apparaat kopen uit het net, de accu ontlaadt niet en laadt wel op zonoverschot | Alleen slim opladen
   3. de zon vult de accu vandaag toch, en er komen nog goedkopere zonnige kwartieren om dat te doen | de zon gaat het net in, de accu wacht op die kwartieren | Alleen slim ontladen
   4. dit kwartier is niet gedekt, en er komen nog gedekte kwartieren | je huis koopt in, de accu wacht op de duurdere kwartieren | Alleen slim opladen
@@ -287,8 +287,13 @@ actions:
                   {% set k.nog = k.nog - [kwh, laadvermogen_per_kwartier / rendement] | min %}
                 {% endfor %}
                 {{ dit_kwartier in dekking.zon and k.zon | map(attribute=2) | sum >= ruimte and dit_kwartier not in k.gekozen }}
+              package_laadt: >-             # gaat het package nu echt laden? Alleen als de accu niet vol is, de prijzen genoeg verschillen (de spread), en de accu na de vorige laadbeurt weer 10 procent onder het maximum zit
+                {{ soc < soc_maximum
+                   and (soc <= soc_maximum - 10 or is_state('input_boolean.dynamisch_recent_geladen', 'off'))
+                   and states('sensor.dynamisch_spread_indicatie_nom') | float(0)
+                       >= states('input_number.dynamisch_minimale_spread') | float(0) }}
               gewenst: >-                   # de modus volgens de regels uit de beschrijving
-                {% if is_state('sensor.dynamisch_goedkoopste_periode','Ja') and not (uitgesloten_apparaat_aan and soc >= soc_maximum) %}
+                {% if is_state('sensor.dynamisch_goedkoopste_periode','Ja') and (package_laadt or not uitgesloten_apparaat_aan) %}
                   Dynamisch NOM
                 {% elif uitgesloten_apparaat_aan %}
                   Alleen slim opladen
