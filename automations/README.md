@@ -10,7 +10,7 @@ topping up the rainwater tank. Each one is a separate YAML file.
 |---|---|
 | [`accu_dagplan_en_bijplan.yaml`](accu_dagplan_en_bijplan.yaml) | Fills the Zendure battery with solar and uses it for the most expensive quarter-hours. Charges from the grid only when that is cheaper, even after the charging loss. Sets the battery mode |
 | [`vaatwasser_starten_op_de_goedkoopste_prijs.yaml`](vaatwasser_starten_op_de_goedkoopste_prijs.yaml) | Starts auto 2 on the Siemens dishwasher, delayed until the cheapest window, or earlier when solar is being exported |
-| [`boiler_verhogen_zonoverschot.yaml`](boiler_verhogen_zonoverschot.yaml) | Raises the hot water setpoint on the Ecoforest heat pump when there is really solar left over |
+| [`boiler_verhogen_zonoverschot.yaml`](boiler_verhogen_zonoverschot.yaml) | Raises the hot water setpoint on the Ecoforest heat pump when there is solar left over, when exporting costs money, or when the purchase price is negative |
 | [`warmtepomp_koeling_uit_bij_hoge_stroomprijs.yaml`](warmtepomp_koeling_uit_bij_hoge_stroomprijs.yaml) | Turns the Ecoforest heat pump off above EUR 0.50 per kWh when warm weather is forecast |
 | [`notificatie_batterij_sensoren_leeg.yaml`](notificatie_batterij_sensoren_leeg.yaml) | Sends a notification when a sensor battery drops below 20 percent, and a reminder every morning at 09:00 until it is replaced |
 | [`waterput_bijvullen_bewaking.yaml`](waterput_bijvullen_bewaking.yaml) | Watches topping up the rainwater tank with tap water. Closes the valve when a stuck float lets the level pass the maximum, and sends a notification when topping up runs for 4 hours, no water flows, the valve leaks, or the flow meter valve blocks the line |
@@ -129,7 +129,7 @@ Not every automation needs everything.
 |---|---|
 | [`accu_dagplan_en_bijplan.yaml`](accu_dagplan_en_bijplan.yaml) | zenSDK package, Solcast, Nordpool, and optionally power sensors on appliances during which the battery must not discharge |
 | [`vaatwasser_starten_op_de_goedkoopste_prijs.yaml`](vaatwasser_starten_op_de_goedkoopste_prijs.yaml) | Home Connect, Nordpool, and the P1 meter |
-| [`boiler_verhogen_zonoverschot.yaml`](boiler_verhogen_zonoverschot.yaml) | Tech Controllers, zenSDK package, the P1 meter, and a power meter on the heat pump circuit |
+| [`boiler_verhogen_zonoverschot.yaml`](boiler_verhogen_zonoverschot.yaml) | Energie management in the Eplucon portal, Tech Controllers, Nordpool (a purchase and an export price sensor), the P1 meter, a power meter on the heat pump circuit and a notify service. The zenSDK package is optional |
 | [`warmtepomp_koeling_uit_bij_hoge_stroomprijs.yaml`](warmtepomp_koeling_uit_bij_hoge_stroomprijs.yaml) | Tech Controllers, Nordpool, and a sensor with today's forecast high, from any weather integration |
 | [`notificatie_batterij_sensoren_leeg.yaml`](notificatie_batterij_sensoren_leeg.yaml) | a label on the battery percentage sensors to watch, with the label ID `batterij_melding` (name it Batterij melding and Home Assistant gives it that ID), and a notify entity for the messages (mine is `notify.gezin`). The `notities` at the top are optional: text in brackets after a device name, mine say which side of a blind to charge. Replace them with your own sensors or leave them empty with `notities: {}` |
 
@@ -140,7 +140,6 @@ Not every automation needs everything.
 | [Nordpool](https://github.com/custom-components/nordpool/) | the quarter-hour prices, tax and surcharges included. Take the HACS one, not the Nord Pool integration that ships with Home Assistant |
 | [Home Connect](https://www.home-assistant.io/integrations/home_connect) | the dishwasher door, program, remote start and the delayed start time |
 | [Tech Controllers](https://github.com/mariusz-ostoja-swierczynski/tech-controllers) | the heat pump: the hot water setpoint and the on/off switch |
-| [Eplucon](https://github.com/koenhendriks/ha-eplucon) | readings from the same heat pump, used here only for the water temperature in a notification |
 
 ## Measured assumptions
 
@@ -157,8 +156,17 @@ installation.
 | `zon_zekerheid` | 0.8 | Solcast ran 20 percent high on most days in September 2026; a bigger margin would buy solar you would have had for free |
 | `huisverbruik` | 0.7 kW | chosen with a year of measurements, November 2025 to October 2026: less at night (0.55), more in the evening (1 to 1.8). Anything between 0.65 and 0.75 gives almost the same result |
 
-[`boiler_verhogen_zonoverschot.yaml`](boiler_verhogen_zonoverschot.yaml) uses a threshold of 2400 W, based on the
-measured 2177 W draw during water heating.
+[`boiler_verhogen_zonoverschot.yaml`](boiler_verhogen_zonoverschot.yaml) expects Energie management in the Eplucon
+portal to set the hot water to 45 degrees in expensive hours and 58 in the cheapest ones. It only lifts that 58 to 65 and
+never touches the 45. Surplus is export plus what the heat pump draws, minus what the battery discharges. It uses these:
+
+| variable | value | source |
+|---|---|---|
+| `prijssensor` | `sensor.nordpool_kwh_nl_eur_4_10_0` | what you pay per kWh: the market price plus VAT, energy tax and your supplier's surcharge |
+| `terugleverprijssensor` | `sensor.nordpool_kwh_nl_eur_5_10_0` | what you get per kWh for export, negative when exporting costs money. Mine is a second Nordpool sensor that adds VAT, my supplier's fixed fee and its solar bonus to the market price. With net metering, point it at the purchase price sensor |
+| `start_vanaf` | 2400 W | surplus needed to raise the setpoint, based on the measured 2177 W draw during water heating |
+| `start_vanaf_bij_negatieve_terugleverprijs` | 1000 W | surplus needed when the export price is negative. The rest of the 2177 W comes from the battery or the grid; raise it if you do not want that |
+| `terug_onder` | 2200 W | below this surplus it goes back to 58, unless the export price is negative. Lower than `start_vanaf`, so it does not switch back and forth |
 
 [`vaatwasser_starten_op_de_goedkoopste_prijs.yaml`](vaatwasser_starten_op_de_goedkoopste_prijs.yaml) uses these:
 
