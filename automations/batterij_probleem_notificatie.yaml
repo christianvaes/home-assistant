@@ -1,0 +1,55 @@
+alias: Batterij probleem notificatie
+description: |-
+  Versie 20261117 · https://github.com/christianvaes/home-assistant
+
+  Melding als het huis tien minuten inkoopt of teruglevert terwijl de batterij dat had moeten opvangen: het package stuurt niet aan, de batterij levert of laadt niet, of hij is offline. Afknijpen ter bescherming geeft geen melding.
+trigger_variables:
+  p1sensor: sensor.p1_meter_5c2faf108f1e_actueel_vermogen  # vermogen op de P1-meter in W: positief bij inkoop, negatief bij teruglevering
+triggers:
+  - alias: Huis koopt in terwijl de batterij had moeten leveren
+    trigger: template
+    value_template: >-
+      {# standen waarin de batterij het huis dekt #}
+      {% set moet_leveren = states('input_select.zendure_2400_ac_modus_selecteren') in ['Dynamisch NOM', 'Nul op de meter', 'Alleen slim ontladen'] %}
+      {# het huis haalt duidelijk stroom uit het net #}
+      {% set koopt = states(p1sensor) | float(0) > 200 %}
+      {# goede redenen: leeg, bewust laden uit het net, afknijpen ter bescherming, al op vol vermogen #}
+      {% set leeg = is_state('sensor.zendure_2400_ac_soc_limiet_status', 'Ontlaadlimiet bereikt') %}
+      {% set laadt = states('sensor.zendure_2400_ac_ingesteld_oplaadvermogen') | float(0) > 0 %}
+      {% set knijpt_af = states('sensor.solarflow_2400_ac_plus_derate_flag') | int(0) != 0 %}
+      {# vol vermogen: het laagste van het apparaat en je instelling in het package, min 100 W meetmarge #}
+      {% set max_ontladen = [states('sensor.zendure_2400_ac_omvormer_max_ontlaadvermogen') | float(2400), states('input_number.zendure_2400_ac_max_ontlaadvermogen') | float(2400)] | min %}
+      {% set vol_vermogen = states('sensor.zendure_2400_ac_vermogen_export') | float(0) >= max_ontladen - 100 %}
+      {{ moet_leveren and koopt and not (leeg or laadt or knijpt_af or vol_vermogen) }}
+    for:
+      minutes: 10
+    id: inkoop
+    note: Offline telt als 0 W geleverd, dus ook dat geeft een melding. Tien minuten, zodat een korte piek of een wissel van stand geen melding geeft.
+  - alias: Huis levert terug terwijl de batterij had moeten laden
+    trigger: template
+    value_template: >-
+      {# standen waarin de batterij laadt op zonoverschot; in Alleen slim ontladen gaat de zon bewust het net in #}
+      {% set moet_laden = states('input_select.zendure_2400_ac_modus_selecteren') in ['Dynamisch NOM', 'Nul op de meter', 'Alleen slim opladen'] %}
+      {# het huis levert duidelijk stroom terug #}
+      {% set levert_terug = states(p1sensor) | float(0) < -200 %}
+      {# goede redenen: bijna vol (dan laadt hij vanzelf langzamer), afknijpen ter bescherming, al op vol vermogen #}
+      {% set bijna_vol = states('sensor.zendure_2400_ac_laadpercentage') | float(0) >= 95 %}
+      {% set knijpt_af = states('sensor.solarflow_2400_ac_plus_derate_flag') | int(0) != 0 %}
+      {% set max_laden = [states('sensor.zendure_2400_ac_omvormer_max_oplaadvermogen') | float(2400), states('input_number.zendure_2400_ac_max_oplaadvermogen') | float(2400)] | min %}
+      {% set vol_vermogen = states('sensor.zendure_2400_ac_vermogen_import') | float(0) >= max_laden - 100 %}
+      {{ moet_laden and levert_terug and not (bijna_vol or knijpt_af or vol_vermogen) }}
+    for:
+      minutes: 10
+    id: teruglevering
+    note: Offline telt als 0 W geladen en 0 procent, dus ook dat geeft een melding.
+actions:
+  - alias: Stuur een melding met wat het package vraagt en wat de batterij doet
+    action: notify.mobile_app_samsung_galaxy_s26_christian
+    data:
+      title: Batterij vangt {{ trigger.id }} niet op
+      message: >-
+        Batterij {{ states('sensor.zendure_2400_ac_laadpercentage') }} %.
+        Package vraagt {{ states('sensor.zendure_2400_ac_ingesteld_ontlaadvermogen') }} W ontladen en {{ states('sensor.zendure_2400_ac_ingesteld_oplaadvermogen') }} W laden,
+        batterij levert {{ states('sensor.zendure_2400_ac_vermogen_export') }} W en neemt {{ states('sensor.zendure_2400_ac_vermogen_import') }} W op.
+    note: "Zo lees je hem: vraagt het package 0 W, dan zit het in het package; vraagt het wel maar levert de batterij minder, dan zit het in de batterij; staat er unavailable, dan is hij offline."
+mode: single

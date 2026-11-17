@@ -1,8 +1,8 @@
 # Home Assistant automations
 
 Automations that let appliances follow the electricity price and use the solar
-left over, plus two that keep an eye on the batteries in my sensors and on
-topping up the rainwater tank. Each one is a separate YAML file.
+left over, plus three that keep an eye on the home battery, the batteries in my
+sensors and topping up the rainwater tank. Each one is a separate YAML file.
 
 ## Files
 
@@ -13,7 +13,8 @@ topping up the rainwater tank. Each one is a separate YAML file.
 | [`boiler_verhogen_zonoverschot.yaml`](boiler_verhogen_zonoverschot.yaml) | Raises the hot water setpoint on the Ecoforest heat pump when there is solar left over, when exporting costs money, or when the purchase price is negative |
 | [`warmtepomp_koeling_uit_bij_hoge_stroomprijs.yaml`](warmtepomp_koeling_uit_bij_hoge_stroomprijs.yaml) | Turns the Ecoforest heat pump off above EUR 0.50 per kWh when warm weather is forecast |
 | [`notificatie_batterij_sensoren_leeg.yaml`](notificatie_batterij_sensoren_leeg.yaml) | Sends a notification when a sensor battery drops below 20 percent, and a reminder every morning at 09:00 until it is replaced |
-| [`waterput_bijvullen_bewaking.yaml`](waterput_bijvullen_bewaking.yaml) | Watches topping up the rainwater tank with tap water. Closes the valve when a stuck float lets the level pass the maximum, and sends a notification when topping up runs for 4 hours, no water flows, the valve leaks, or the flow meter valve blocks the line |
+| [`batterij_probleem_notificatie.yaml`](batterij_probleem_notificatie.yaml) | Monitors the Zendure battery and sends a notification when it stops charging or discharging when it should, or goes offline |
+| [`waterput_bijvullen_bewaking.yaml`](waterput_bijvullen_bewaking.yaml) | Monitors topping up the rainwater tank with tap water. Closes the valve when the tank overfills, and sends a notification when topping up runs for 4 hours, no water flows, the valve leaks or the line is blocked |
 
 ## Hardware
 
@@ -58,7 +59,7 @@ flowchart TD
     K -->|"4 quarters at €0.20 for a morning at €0.40"| P["Number for the package: 4<br>the cheapest quarters of the day"]
 ```
 
-The settings in the boxes are mine. [Measured assumptions](#measured-assumptions) says where they
+The settings in the boxes are mine. [Settings](#settings) says where they
 come from.
 
 **Example.** Solcast says 15 kWh, the battery is at 20 percent, the sun is up. After the margin
@@ -131,17 +132,19 @@ Not every automation needs everything.
 | [`vaatwasser_starten_op_de_goedkoopste_prijs.yaml`](vaatwasser_starten_op_de_goedkoopste_prijs.yaml) | Home Connect, Nordpool, and the P1 meter |
 | [`boiler_verhogen_zonoverschot.yaml`](boiler_verhogen_zonoverschot.yaml) | Energie management in the Eplucon portal, Tech Controllers, Nordpool (a purchase and an export price sensor), the P1 meter, a power meter on the heat pump circuit and a notify service. The zenSDK package is optional |
 | [`warmtepomp_koeling_uit_bij_hoge_stroomprijs.yaml`](warmtepomp_koeling_uit_bij_hoge_stroomprijs.yaml) | Tech Controllers, Nordpool, and a sensor with today's forecast high, from any weather integration |
-| [`notificatie_batterij_sensoren_leeg.yaml`](notificatie_batterij_sensoren_leeg.yaml) | a label on the battery percentage sensors to watch, with the label ID `batterij_melding` (name it Batterij melding and Home Assistant gives it that ID), and a notify entity for the messages (mine is `notify.gezin`). The `notities` at the top are optional: text in brackets after a device name, mine say which side of a blind to charge. Replace them with your own sensors or leave them empty with `notities: {}` |
+| [`batterij_probleem_notificatie.yaml`](batterij_probleem_notificatie.yaml) | zenSDK package, the P1 meter and a notify service. Optional: the Zendure integration, for throttling |
+| [`notificatie_batterij_sensoren_leeg.yaml`](notificatie_batterij_sensoren_leeg.yaml) | a label Batterij melding on the battery percentage sensors to watch, and a notify entity (mine is `notify.gezin`). The `notities` at the top are optional text after a device name; leave them empty with `notities: {}` |
 
 | integration | provides |
 |---|---|
 | [Zendure zenSDK package](https://github.com/Gielz1986/Zendure-HA-zenSDK) | the battery entities, the mode selector and the dynamic price sensors. Keep its minimum spread at 25 percent or lower, above that it can refuse the planned quarters |
+| [Zendure integration](https://github.com/Zendure/Zendure-HA) | optional: the flag that shows the battery throttling itself, for example when it gets too hot |
 | [Solcast](https://github.com/BJReplay/ha-solcast-solar) | the solar forecast for today and tomorrow, as totals and per half hour (the `detailedForecast` attribute) |
 | [Nordpool](https://github.com/custom-components/nordpool/) | the quarter-hour prices, tax and surcharges included. Take the HACS one, not the Nord Pool integration that ships with Home Assistant |
 | [Home Connect](https://www.home-assistant.io/integrations/home_connect) | the dishwasher door, program, remote start and the delayed start time |
 | [Tech Controllers](https://github.com/mariusz-ostoja-swierczynski/tech-controllers) | the heat pump: the hot water setpoint and the on/off switch |
 
-## Measured assumptions
+## Settings
 
 The numbers in [`accu_dagplan_en_bijplan.yaml`](accu_dagplan_en_bijplan.yaml) come from measurements on my own
 installation.
@@ -174,3 +177,9 @@ never touches the 45. Surplus is export plus what the heat pump draws, minus wha
 |---|---|---|
 | `vanaf_teruglevering` | 1500 W | the first heating phase of auto 2 draws 1.42 to 1.51 kW |
 | `kwartieren` | 10 | auto 2 takes 2:00 to 2:17 |
+
+[`batterij_probleem_notificatie.yaml`](batterij_probleem_notificatie.yaml) uses this, and your own notify service in the action:
+
+| variable | value | source |
+|---|---|---|
+| `p1sensor` | `sensor.p1_meter_5c2faf108f1e_actueel_vermogen` | power on the P1 meter in W, positive when buying, negative when feeding in |
