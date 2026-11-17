@@ -103,7 +103,7 @@ Every quarter-hour it picks a mode; the first rule that applies wins.
 
 | rule | solar | price | battery | what happens | mode |
 |---|---|---|---|---|---|
-| 1 | any | one of the cheapest quarters of the day | any, unless an excluded appliance runs and the package will not charge | the battery charges from the grid, the house buys its own power | `Dynamisch NOM` |
+| 1 | any | one of the cheapest quarters of the day | the package will charge | the battery charges from the grid, the house buys its own power | `Dynamisch NOM` |
 | 2 | any | any | excluded appliance running | the house buys from the grid, the battery does not discharge but still charges on solar | `Alleen slim opladen` |
 | 3 | fills the battery today | cheaper sunny quarters later will fill it | any | solar goes to the grid, the battery waits for those quarters | `Alleen slim ontladen` |
 | 4 | any | not a covered quarter | kept for covered quarters ahead | the house buys from the grid | `Alleen slim opladen` |
