@@ -17,4 +17,4 @@ to make the energy bill as low as possible.
 | [`automations/`](automations/) | Automations for the home battery, dishwasher, hot water and heat pump, a reminder for empty sensor batteries, and a watch on topping up the rainwater tank |
 | [`cards/`](cards/) | Dashboard cards, such as a pop-up with every parcel on its way |
 
-The solar panels have their own repo: [homeassistant-apsystems_modbus](https://github.com/christianvaes/homeassistant-apsystems_modbus) reads the APsystems inverters. Curtailing them when exporting costs money comes next.
+The solar panels have their own repo: [homeassistant-apsystems_modbus](https://github.com/christianvaes/homeassistant-apsystems_modbus) reads and controls the APsystems inverters, with a [blueprint](https://github.com/christianvaes/homeassistant-apsystems_modbus#automatic-control-for-dynamic-tariffs) that turns them down when exporting costs money, and off when the price is negative.

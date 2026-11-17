@@ -15,6 +15,7 @@ sensors and topping up the rainwater tank. Each one is a separate YAML file.
 | [`notificatie_batterij_sensoren_leeg.yaml`](notificatie_batterij_sensoren_leeg.yaml) | Sends a notification when a sensor battery drops below 20 percent, and a reminder every morning at 09:00 until it is replaced |
 | [`batterij_probleem_notificatie.yaml`](batterij_probleem_notificatie.yaml) | Monitors the Zendure battery and sends a notification when it stops charging or discharging when it should, or goes offline |
 | [`waterput_bijvullen_bewaking.yaml`](waterput_bijvullen_bewaking.yaml) | Monitors topping up the rainwater tank with tap water. Closes the valve when the tank overfills, and sends a notification when topping up runs for 4 hours, no water flows, the valve leaks or the line is blocked |
+| [`dynamic_tariffs.yaml`](https://github.com/christianvaes/homeassistant-apsystems_modbus/blob/main/blueprints/automation/apsystems_modbus/dynamic_tariffs.yaml) | Blueprint in my APsystems repo. Turns the solar panels down when exporting costs money, and off when the price is negative |
 
 ## Hardware
 
