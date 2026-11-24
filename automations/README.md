@@ -38,7 +38,7 @@ What I run. Other models from the same brands work, with different entity IDs.
 it can, and buys the rest when power is cheap. It decides two things:
 
 - in which quarters the battery charges from the grid
-- every quarter-hour, which mode the battery runs in
+- every quarter-hour, and right after each new plan, which mode the battery runs in
 
 ### How much the sun fills
 

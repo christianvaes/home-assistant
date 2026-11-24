@@ -1,6 +1,6 @@
 alias: Accu dagplan en bijplan
 description: |-
-  Versie 20261117 · https://github.com/christianvaes/home-assistant
+  Versie 20261123 · https://github.com/christianvaes/home-assistant
 
   Vult de accu zo veel mogelijk met eigen zonnestroom en zet hem in op de duurste kwartieren.
 
@@ -54,6 +54,14 @@ triggers:
     seconds: 3
     id: modus
     note: Zo vaak verandert de prijs. Drie seconden na het kwartier, zodat de prijs, de laadkwartieren en om middernacht het plan van de nieuwe dag al zijn bijgewerkt, en tussen de runs van het package door, dat elke vijf seconden draait. Valt een wissel toch samen met zo'n run, dan kan de accu in Alleen slim opladen blijven ontladen tot de volgende wissel van modus.
+
+  - alias: Modus meteen na het plan
+    trigger: time_pattern
+    hours: /1
+    minutes: 5
+    seconds: 8
+    id: modus
+    note: Verandert het plan om :05 of het lopende kwartier een laadkwartier is, dan volgt de modus meteen en niet pas om :15. Acht seconden, omdat het package na een nieuw plan een laadronde onderbreekt en 'recent geladen' zo'n vijf seconden aan staat.
 
   - alias: Modus direct omzetten als een uitgesloten apparaat aangaat
     trigger: template
