@@ -1,8 +1,8 @@
 alias: Notificatie batterij sensoren leeg
 description: |-
-  Versie 20261107 · https://github.com/christianvaes/home-assistant
+  Versie 20261127 · https://github.com/christianvaes/home-assistant
 
-  Meldt meteen als een batterij met het label Batterij melding onder 20% zakt, en herinnert elke ochtend zolang er nog een bijna leeg of onbereikbaar is.
+  Meldt meteen als een batterij met het label Batterij melding onder 20% zakt, en herinnert elke ochtend zolang er nog een onder 20% zit.
 variables:
   # komt achter de apparaatnaam in de melding, bijvoorbeeld welke kant je moet opladen
   notities:
@@ -40,21 +40,16 @@ actions:
           title: Batterij
           message: "Bijna leeg: {{ device_name(trigger.entity_id) }}{{ ' (' ~ notities[trigger.entity_id] ~ ')' if trigger.entity_id in notities }} {{ trigger.to_state.state | int }}%"
     else:
-      - alias: Zoek de batterijen die nog leeg of onbereikbaar zijn
+      - alias: Zoek de batterijen die nog onder 20% zitten
         variables:
           leeg: >
             {%- set lijst = namespace(namen=[]) -%}
-            {%- for e in label_entities('batterij_melding') -%}
+            {%- for e in label_entities('batterij_melding') if states(e) | float(100) < 20 -%}
               {%- set naam = (device_name(e) or e) ~ (' (' ~ notities[e] ~ ')' if e in notities else '') -%}
-              {%- set waarde = states(e) -%}
-              {%- if waarde == 'unavailable' -%}
-                {%- set lijst.namen = lijst.namen + [naam ~ ' onbereikbaar'] -%}
-              {%- elif waarde | float(100) < 20 -%}
-                {%- set lijst.namen = lijst.namen + [naam ~ ' ' ~ waarde | int ~ '%'] -%}
-              {%- endif -%}
+              {%- set lijst.namen = lijst.namen + [naam ~ ' ' ~ states(e) | int ~ '%'] -%}
             {%- endfor -%}
             {{ lijst.namen }}
-        note: Onbereikbaar telt mee, want een batterij die helemaal op is laat de sensor vaak wegvallen. Unknown niet, dat zie je vooral vlak na een herstart.
+        note: Alleen het percentage telt, net als bij een hub. Een onbereikbare sensor telt niet mee, zodat een apparaat dat je wegzet, zoals een buitenkraan in de winter, zijn label kan houden.
       - alias: Alleen sturen als er iets leeg is
         condition: template
         value_template: "{{ leeg | count > 0 }}"
